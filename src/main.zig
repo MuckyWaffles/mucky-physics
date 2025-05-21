@@ -96,18 +96,9 @@ fn renderConstraint(self: *p.Constraint) void {
     rl.drawLineEx(self.start.*.position, self.end.*.position, 2.0, .purple);
 }
 
-pub fn main() anyerror!void {
-    // Initialization
-    //--------------------------------------------------------------------------------------
-    rl.initWindow(screenWidth, screenHeight, "Mucky Physics");
-    defer rl.closeWindow(); // Close window and OpenGL context
+fn physics_process() !void {
 
-    rl.setTargetFPS(60); // Set our game to run at 60 frames-per-second
-
-    //var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    //const allocator = gpa.allocator();
-
-    //particles = try allocator.alloc(Particle, particleLimit);
+    // Creating particles and constraints
     const mouseParticle = try newParticle(rl.getMousePosition(), 9999);
 
     const p1 = try newParticle(rl.Vector2{ .x = 100, .y = 200 }, 1.0);
@@ -126,14 +117,13 @@ pub fn main() anyerror!void {
     _ = try newConstraint(s1, s3, math.hypot(100.0, 100.0), boxStrength, .both);
     _ = try newConstraint(s4, s2, math.hypot(100.0, 100.0), boxStrength, .both);
 
+    // Creating particle that follows mouse
     const mouseDrag = try newConstraint(mouseParticle, s1, 0.0, 0.002, .both);
-    //--------------------------------------------------------------------------------------
 
-    // Main game loop
-    while (!rl.windowShouldClose()) { // Detect window close button or ESC key
-        // Update
-        //----------------------------------------------------------------------------------
-        // TODO: Update your variables here
+    // Physics loop
+    while (!rl.windowShouldClose()) {
+        const startTime = rl.getTime();
+
         for (&particles) |*particle| {
             if (!particle.inUse) continue;
             particle.update();
@@ -157,10 +147,32 @@ pub fn main() anyerror!void {
                 //if (dist > particle.radius + 6) continue;
             }
         }
-        //----------------------------------------------------------------------------------
 
-        // Draw
-        //----------------------------------------------------------------------------------
+        const endTime = rl.getTime();
+        const frameTime = endTime - startTime;
+
+        // Maintaining a frame length of exactly 0.01
+        rl.waitTime(0.01 - frameTime);
+
+        // TODO: we should probably check if we go under 0,
+        // But this loop is quick enough that we shouldn't
+        // need to worry about such things
+    }
+}
+
+var physicsThread: std.Thread = undefined;
+
+pub fn main() anyerror!void {
+    // Initialization
+    rl.initWindow(screenWidth, screenHeight, "Mucky Physics");
+    defer rl.closeWindow(); // Close window and OpenGL context
+
+    rl.setTargetFPS(60); // Set our game to run at 60 frames-per-second
+
+    physicsThread = try std.Thread.spawn(.{}, physics_process, .{});
+
+    // Main game loop
+    while (!rl.windowShouldClose()) {
         rl.beginDrawing();
         defer rl.endDrawing();
 
@@ -174,7 +186,5 @@ pub fn main() anyerror!void {
             if (!constraint.inUse) continue;
             renderConstraint(constraint);
         }
-
-        //----------------------------------------------------------------------------------
     }
 }
