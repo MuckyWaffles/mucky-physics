@@ -11,13 +11,10 @@ const rl = @import("raylib");
 const screenWidth = 1000;
 const screenHeight = 600;
 
-const particleLimit: u16 = 10;
-var particles: [particleLimit]p.Particle = undefined;
-
 /// Render the particle, and a ring around it to show where it can be grabbed
 fn renderParticle(self: *p.Particle) void {
     // Here we draw two things:
-    rl.drawCircleLinesV(self.position, self.radius + 6, .red);
+    //rl.drawCircleLinesV(self.position, self.radius + 6, .red);
     rl.drawCircleV(self.position, self.radius, .white);
 
     rl.drawText(
@@ -30,7 +27,7 @@ fn renderParticle(self: *p.Particle) void {
 }
 
 fn newParticle(position: rl.Vector2, mass: f32) error{NoSpace}!*p.Particle {
-    for (&particles) |*particle| {
+    for (&p.particles) |*particle| {
         if (particle.*.inUse) continue;
 
         particle.* = p.Particle{
@@ -117,6 +114,12 @@ fn physics_process() !void {
     _ = try newConstraint(s1, s3, math.hypot(100.0, 100.0), boxStrength, .both);
     _ = try newConstraint(s4, s2, math.hypot(100.0, 100.0), boxStrength, .both);
 
+    for (0..400) |_| {
+        const spawnX: f32 = @floatFromInt(rl.getRandomValue(0, @intFromFloat(screenWidth)));
+        const spawnY: f32 = @floatFromInt(rl.getRandomValue(50, @intFromFloat(screenHeight)));
+        _ = try newParticle(rl.Vector2{ .x = spawnX, .y = spawnY }, 1.0);
+    }
+
     // Creating particle that follows mouse
     const mouseDrag = try newConstraint(mouseParticle, s1, 0.0, 0.002, .both);
 
@@ -124,7 +127,7 @@ fn physics_process() !void {
     while (!rl.windowShouldClose()) {
         const startTime = rl.getTime();
 
-        for (&particles) |*particle| {
+        for (&p.particles) |*particle| {
             if (!particle.inUse) continue;
             particle.update();
             constrainParticleToScreen(particle);
@@ -137,7 +140,7 @@ fn physics_process() !void {
         mouseParticle.position = rl.getMousePosition();
         mouseDrag.strength = 0.0;
         if (rl.isMouseButtonDown(rl.MouseButton.left)) {
-            for (&particles) |*particle| {
+            for (&p.particles) |*particle| {
                 if (!particle.inUse) continue;
                 const delta = rl.getMousePosition().subtract(particle.position);
                 const dist = math.hypot(delta.x, delta.y);
@@ -178,7 +181,7 @@ pub fn main() anyerror!void {
 
         rl.clearBackground(.black);
 
-        for (&particles) |*particle| {
+        for (&p.particles) |*particle| {
             if (!particle.inUse) continue;
             renderParticle(particle);
         }
