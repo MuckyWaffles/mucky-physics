@@ -9,10 +9,7 @@ That's a fair distance into the future, though.
 - Allow particles and restraints to collide with each other. This is a must-have,
 but I'm still traumatized from my past attempts at implementing this...
 - Letting the user grab onto whatever particle or constraint they want.
-- An immediate mode GUI, probably RayGui, because there's no way I'm making my own UI.
-It'll actually be somewhat outside my comfort zone, because I'm rather used to DearImGUI instead.
-This actually includes the addition of a lot of tweakable settings, but I'm not going to write those out.
-- This will include being able to generate new particles and constraints.
+- Being able to generate new particles and constraints.
 - This is somewhat out there, but being able to create different levels,
 where the geometry is made up of a series of line segments,
 and being able to dynamically save, load, and create these levels.
