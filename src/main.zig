@@ -7,6 +7,7 @@ const math = std.math;
 // the shortest possible name for it?
 const p = @import("physics.zig");
 const rl = @import("raylib");
+const rg = @import("raygui");
 
 const screenWidth = 1000;
 const screenHeight = 600;
@@ -17,13 +18,15 @@ fn renderParticle(self: *p.Particle) void {
     //rl.drawCircleLinesV(self.position, self.radius + 6, .red);
     rl.drawCircleV(self.position, self.radius, .white);
 
-    rl.drawText(
-        rl.textFormat("%f", .{self.mass}),
-        @intFromFloat(self.position.x),
-        @intFromFloat(self.position.y + 10),
-        18,
-        .light_gray,
-    );
+    if (showMass) {
+        rl.drawText(
+            rl.textFormat("%.2f", .{self.mass - @mod(self.mass, 0.01)}),
+            @intFromFloat(self.position.x),
+            @intFromFloat(self.position.y + 10),
+            18,
+            .light_gray,
+        );
+    }
 }
 
 fn newParticle(position: rl.Vector2, mass: f32) error{NoSpace}!*p.Particle {
@@ -189,5 +192,40 @@ pub fn main() anyerror!void {
             if (!constraint.inUse) continue;
             renderConstraint(constraint);
         }
+        drawUI();
     }
+}
+
+var enableUI = false;
+var showMass = false;
+fn drawUI() void {
+    if (rg.button(rl.Rectangle{
+        .x = 10,
+        .y = 10,
+        .width = 60,
+        .height = 24,
+    }, "Toggle UI")) {
+        enableUI = !enableUI;
+    }
+
+    // Exit if UI isn't enabled
+    if (!enableUI) return;
+
+    const windowRect = rl.Rectangle{
+        .x = screenWidth - 220,
+        .y = 10,
+        .width = 200,
+        .height = 400,
+    };
+    _ = rg.windowBox(windowRect, "Menu");
+    _ = rg.checkBox(
+        rl.Rectangle{
+            .x = windowRect.x + 10,
+            .y = windowRect.y + 36,
+            .width = 60,
+            .height = 20,
+        },
+        "Show Mass",
+        &showMass,
+    );
 }
