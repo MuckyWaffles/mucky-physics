@@ -66,9 +66,6 @@ fn constrainParticleToScreen(particle: *p.Particle) void {
     }
 }
 
-const constraintLimit: u16 = 20;
-var constraints: [constraintLimit]p.Constraint = undefined;
-
 fn newConstraint(
     start: *p.Particle,
     end: *p.Particle,
@@ -76,7 +73,7 @@ fn newConstraint(
     strength: f32,
     constraintType: p.ConstraintType,
 ) error{NoSpace}!*p.Constraint {
-    for (&constraints) |*constraint| {
+    for (&p.constraints) |*constraint| {
         if (constraint.*.inUse) continue;
 
         constraint.* = p.Constraint{
@@ -92,8 +89,32 @@ fn newConstraint(
     return error.NoSpace;
 }
 
+fn newEdge(
+    start: rl.Vector2,
+    end: rl.Vector2,
+) error{NoSpace}!*p.Edge {
+    for (&p.edges) |*edge| {
+        if (edge.*.inUse) continue;
+
+        const norm = rl.Vector2{ .x = 0, .y = -1 };
+
+        edge.* = p.Edge{
+            .inUse = true,
+            .start = start,
+            .end = end,
+            .normal = norm,
+        };
+        return edge;
+    }
+    return error.NoSpace;
+}
+
 fn renderConstraint(self: *p.Constraint) void {
     rl.drawLineEx(self.start.*.position, self.end.*.position, 2.0, .purple);
+}
+
+fn renderEdge(self: *p.Edge) void {
+    rl.drawLineEx(self.start, self.end, 2.0, .green);
 }
 
 fn physics_process() !void {
@@ -117,10 +138,19 @@ fn physics_process() !void {
     _ = try newConstraint(s1, s3, math.hypot(100.0, 100.0), boxStrength, .both);
     _ = try newConstraint(s4, s2, math.hypot(100.0, 100.0), boxStrength, .both);
 
+    _ = try newEdge(
+        rl.Vector2{ .x = 0, .y = screenHeight - 40 },
+        rl.Vector2{ .x = screenWidth / 2, .y = screenHeight - 40 },
+    );
+    _ = try newEdge(
+        rl.Vector2{ .x = screenWidth / 2, .y = screenHeight - 40 },
+        rl.Vector2{ .x = screenWidth, .y = screenHeight - 40 },
+    );
+
     for (0..400) |_| {
-        const spawnX: f32 = @floatFromInt(rl.getRandomValue(0, @intFromFloat(screenWidth)));
-        const spawnY: f32 = @floatFromInt(rl.getRandomValue(50, @intFromFloat(screenHeight)));
-        _ = try newParticle(rl.Vector2{ .x = spawnX, .y = spawnY }, 1.0);
+        //const spawnX: f32 = @floatFromInt(rl.getRandomValue(0, @intFromFloat(screenWidth)));
+        //const spawnY: f32 = @floatFromInt(rl.getRandomValue(50, @intFromFloat(screenHeight)));
+        //_ = try newParticle(rl.Vector2{ .x = spawnX, .y = spawnY }, 1.0);
     }
 
     // Creating particle that follows mouse
@@ -135,7 +165,7 @@ fn physics_process() !void {
             particle.update();
             constrainParticleToScreen(particle);
         }
-        for (&constraints) |*constraint| {
+        for (&p.constraints) |*constraint| {
             if (!constraint.inUse) continue;
             constraint.satisfy();
         }
@@ -188,9 +218,13 @@ pub fn main() anyerror!void {
             if (!particle.inUse) continue;
             renderParticle(particle);
         }
-        for (&constraints) |*constraint| {
+        for (&p.constraints) |*constraint| {
             if (!constraint.inUse) continue;
             renderConstraint(constraint);
+        }
+        for (&p.edges) |*edge| {
+            if (!edge.inUse) continue;
+            renderEdge(edge);
         }
         drawUI();
     }
@@ -221,7 +255,7 @@ fn drawUI() void {
     _ = rg.checkBox(
         rl.Rectangle{
             .x = windowRect.x + 10,
-            .y = windowRect.y + 36,
+            .y = windowRect.y + 35,
             .width = 60,
             .height = 20,
         },

@@ -9,6 +9,12 @@ const gravity: f32 = 200.0;
 const particleLimit: u16 = 600;
 pub var particles: [particleLimit]Particle = undefined;
 
+const constraintLimit: u16 = 20;
+pub var constraints: [constraintLimit]Constraint = undefined;
+
+const edgeLimit: u16 = 20;
+pub var edges: [edgeLimit]Edge = undefined;
+
 /// Particle with Verlet Integration
 pub const Particle = struct {
     inUse: bool = false,
@@ -16,12 +22,13 @@ pub const Particle = struct {
     previous: rl.Vector2 = rl.Vector2{ .x = 0, .y = 0 },
     position: rl.Vector2 = rl.Vector2{ .x = 0, .y = 0 },
     accel: rl.Vector2 = rl.Vector2{ .x = 0, .y = 0 },
+    force: rl.Vector2 = rl.Vector2{ .x = 0, .y = 0 },
     mass: f32 = 1.0,
     radius: f32 = 10,
 
     /// Update using Verlet integration
     pub fn update(self: *Particle) void {
-        self.accel.y += gravity;
+        self.force.y += gravity * self.mass;
 
         for (&particles) |*particle| {
             if (!particle.inUse) continue;
@@ -57,11 +64,29 @@ pub const Particle = struct {
         const drag = 0.001 * 0.5 * velMag * velMag;
         vel = rl.Vector2.scale(vel.normalize(), velMag - drag);
 
+        self.accel = self.accel.add(self.force.scale(1 / self.mass));
+        self.force = rl.Vector2{ .x = 0, .y = 0 };
+
         self.position.x += vel.x + self.accel.x * math.pow(f32, deltaTime, 2);
         self.position.y += vel.y + self.accel.y * math.pow(f32, deltaTime, 2);
         self.previous = position;
 
         self.accel = rl.Vector2{ .x = 0, .y = 0 };
+
+        for (edges) |edge| {
+            var contact: rl.Vector2 = undefined;
+            if (getLineIntersection(
+                edge.start,
+                edge.end,
+                self.position.add(edge.normal.scale(16)),
+                self.position,
+                &contact,
+            )) {
+                const power = self.position.distance(contact);
+                self.position.x += edge.normal.x * power;
+                self.position.y += edge.normal.y * power;
+            }
+        }
     }
 };
 
@@ -69,6 +94,33 @@ pub const ConstraintType = enum {
     both,
     push,
     pull,
+};
+
+fn getLineIntersection(p0: rl.Vector2, p1: rl.Vector2, p2: rl.Vector2, p3: rl.Vector2, i: ?*rl.Vector2) bool {
+    const s1: rl.Vector2 = p1.subtract(p0);
+    const s2: rl.Vector2 = p3.subtract(p2);
+
+    const s = (-s1.y * (p0.x - p2.x) + s1.x * (p0.y - p2.y)) / (-s2.x * s1.y + s1.x * s2.y);
+    const t = (s2.x * (p0.y - p2.y) - s2.y * (p0.x - p2.x)) / (-s2.x * s1.y + s1.x * s2.y);
+
+    if (s >= 0 and s <= 1 and t >= 0 and t <= 1) {
+        // Collision detected
+        if (i != null) {
+            i.?.x = p0.x + (t * s1.x);
+            i.?.y = p0.y + (t * s1.y);
+        }
+        return true;
+    }
+
+    return false; // No collision
+}
+
+pub const Edge = struct {
+    inUse: bool = false,
+
+    start: rl.Vector2,
+    end: rl.Vector2,
+    normal: rl.Vector2,
 };
 
 pub const Constraint = struct {
@@ -106,5 +158,39 @@ pub const Constraint = struct {
             end.position.x -= delta.x * diff * strength * endAlpha;
             end.position.y -= delta.y * diff * strength * endAlpha;
         }
+
+        // for (edges) |con| {
+        // if (!getLineIntersection(
+        // con.start,
+        // con.end,
+        // self.start.position,
+        // self.end.position,
+        // null,
+        // )) return;
+
+        // var contact: rl.Vector2 = undefined;
+        // if (getLineIntersection(
+        // con.start,
+        // con.end,
+        // self.start.position.add(con.normal.scale(16)),
+        // self.start.position,
+        // &contact,
+        // )) {
+        // const power = self.start.position.distance(contact);
+        // self.start.position.x += con.normal.x * power;
+        // self.start.position.y += con.normal.y * power;
+        // }
+        // if (getLineIntersection(
+        // con.start,
+        // con.end,
+        // self.end.position.add(con.normal.scale(16)),
+        // self.end.position,
+        // &contact,
+        // )) {
+        // const power = self.end.position.distance(contact);
+        // self.end.position.x += con.normal.x * power;
+        // self.end.position.y += con.normal.y * power;
+        // }
+        // }
     }
 };
