@@ -139,18 +139,27 @@ fn physics_process() !void {
     _ = try newConstraint(s4, s2, math.hypot(100.0, 100.0), boxStrength, .both);
 
     _ = try newEdge(
-        rl.Vector2{ .x = 0, .y = screenHeight - 40 },
-        rl.Vector2{ .x = screenWidth / 2, .y = screenHeight - 40 },
+        rl.Vector2{ .x = screenWidth * 0.25, .y = screenHeight - 40 },
+        rl.Vector2{ .x = screenWidth * 0.75, .y = screenHeight - 40 },
     );
-    _ = try newEdge(
-        rl.Vector2{ .x = screenWidth / 2, .y = screenHeight - 40 },
+    var e2 = try newEdge(
+        rl.Vector2{ .x = screenWidth * 0.75, .y = screenHeight - 40 },
         rl.Vector2{ .x = screenWidth, .y = screenHeight - 40 },
     );
+    e2.end.y -= 50;
+    e2.normal = rl.Vector2{ .x = -0.098, .y = -0.49 };
+
+    var e3 = try newEdge(
+        rl.Vector2{ .x = 0, .y = screenHeight - 40 },
+        rl.Vector2{ .x = screenWidth * 0.25, .y = screenHeight - 40 },
+    );
+    e3.start.y -= 50;
+    e3.normal = rl.Vector2{ .x = 0.098, .y = -0.49 };
 
     for (0..400) |_| {
-        //const spawnX: f32 = @floatFromInt(rl.getRandomValue(0, @intFromFloat(screenWidth)));
-        //const spawnY: f32 = @floatFromInt(rl.getRandomValue(50, @intFromFloat(screenHeight)));
-        //_ = try newParticle(rl.Vector2{ .x = spawnX, .y = spawnY }, 1.0);
+        const spawnX: f32 = @floatFromInt(rl.getRandomValue(0, @intFromFloat(screenWidth)));
+        const spawnY: f32 = @floatFromInt(rl.getRandomValue(50, @intFromFloat(screenHeight)));
+        _ = try newParticle(rl.Vector2{ .x = spawnX, .y = spawnY }, 1.0);
     }
 
     // Creating particle that follows mouse
