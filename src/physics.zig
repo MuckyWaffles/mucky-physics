@@ -158,39 +158,5 @@ pub const Constraint = struct {
             end.position.x -= delta.x * diff * strength * endAlpha;
             end.position.y -= delta.y * diff * strength * endAlpha;
         }
-
-        // for (edges) |con| {
-        // if (!getLineIntersection(
-        // con.start,
-        // con.end,
-        // self.start.position,
-        // self.end.position,
-        // null,
-        // )) return;
-
-        // var contact: rl.Vector2 = undefined;
-        // if (getLineIntersection(
-        // con.start,
-        // con.end,
-        // self.start.position.add(con.normal.scale(16)),
-        // self.start.position,
-        // &contact,
-        // )) {
-        // const power = self.start.position.distance(contact);
-        // self.start.position.x += con.normal.x * power;
-        // self.start.position.y += con.normal.y * power;
-        // }
-        // if (getLineIntersection(
-        // con.start,
-        // con.end,
-        // self.end.position.add(con.normal.scale(16)),
-        // self.end.position,
-        // &contact,
-        // )) {
-        // const power = self.end.position.distance(contact);
-        // self.end.position.x += con.normal.x * power;
-        // self.end.position.y += con.normal.y * power;
-        // }
-        // }
     }
 };

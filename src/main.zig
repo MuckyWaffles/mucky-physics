@@ -1,10 +1,6 @@
-// raylib-zig (c) Nikolas Wipper 2023
-
 const std = @import("std");
 const math = std.math;
 
-// P for physics, because why wouldn't I choose
-// the shortest possible name for it?
 const p = @import("physics.zig");
 const rl = @import("raylib");
 const rg = @import("raygui");
@@ -118,6 +114,12 @@ fn renderEdge(self: *p.Edge) void {
 }
 
 fn physics_process() !void {
+    var prng = std.Random.DefaultPrng.init(blk: {
+        var seed: u64 = undefined;
+        try std.posix.getrandom(std.mem.asBytes(&seed));
+        break :blk seed;
+    });
+    const rand = prng.random();
 
     // Creating particles and constraints
     const mouseParticle = try newParticle(rl.getMousePosition(), 9999);
@@ -159,7 +161,8 @@ fn physics_process() !void {
     for (0..400) |_| {
         const spawnX: f32 = @floatFromInt(rl.getRandomValue(0, @intFromFloat(screenWidth)));
         const spawnY: f32 = @floatFromInt(rl.getRandomValue(50, @intFromFloat(screenHeight)));
-        _ = try newParticle(rl.Vector2{ .x = spawnX, .y = spawnY }, 1.0);
+        const mass = 0.8 + rand.float(f32) * 0.60;
+        _ = try newParticle(rl.Vector2{ .x = spawnX, .y = spawnY }, mass);
     }
 
     // Creating particle that follows mouse
