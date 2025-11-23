@@ -188,10 +188,11 @@ fn physics_process() !void {
 
         for (&p.particles) |*particle| {
             if (!particle.inUse) continue;
-            particle.update();
+            particle.integrate();
             if (Options.periodicBoundary) {
                 periodicBoundary(particle);
             } else nonPeriodicBoundary(particle);
+            particle.collide();
         }
         for (&p.constraints) |*constraint| {
             if (!constraint.inUse) continue;

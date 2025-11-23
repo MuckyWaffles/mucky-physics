@@ -27,9 +27,28 @@ pub const Particle = struct {
     radius: f32 = 10,
 
     /// Update using Verlet integration
-    pub fn update(self: *Particle) void {
+    pub fn integrate(self: *Particle) void {
         self.force.y += gravity * self.mass;
 
+        const position = self.position;
+        const previous = self.previous;
+        var vel = position.subtract(previous);
+
+        const velMag = std.math.hypot(vel.x, vel.y);
+        const drag = 0.001 * 0.5 * velMag * velMag;
+        vel = rl.Vector2.scale(vel.normalize(), velMag - drag);
+
+        self.accel = self.accel.add(self.force.scale(1 / self.mass));
+        self.force = rl.Vector2{ .x = 0, .y = 0 };
+
+        self.position.x += vel.x + self.accel.x * math.pow(f32, deltaTime, 2);
+        self.position.y += vel.y + self.accel.y * math.pow(f32, deltaTime, 2);
+        self.previous = position;
+
+        self.accel = rl.Vector2{ .x = 0, .y = 0 };
+    }
+
+    pub fn collide(self: *Particle) void {
         for (&particles) |*particle| {
             if (!particle.inUse) continue;
             if (particle.position.x == self.position.x and
@@ -54,24 +73,6 @@ pub const Particle = struct {
                 self.position.y -= delta.y * diff * strength * endAlpha;
             }
         }
-
-        // Verlet Integration
-        const position = self.position;
-        const previous = self.previous;
-        var vel = position.subtract(previous);
-
-        const velMag = std.math.hypot(vel.x, vel.y);
-        const drag = 0.001 * 0.5 * velMag * velMag;
-        vel = rl.Vector2.scale(vel.normalize(), velMag - drag);
-
-        self.accel = self.accel.add(self.force.scale(1 / self.mass));
-        self.force = rl.Vector2{ .x = 0, .y = 0 };
-
-        self.position.x += vel.x + self.accel.x * math.pow(f32, deltaTime, 2);
-        self.position.y += vel.y + self.accel.y * math.pow(f32, deltaTime, 2);
-        self.previous = position;
-
-        self.accel = rl.Vector2{ .x = 0, .y = 0 };
 
         for (edges) |edge| {
             var contact: rl.Vector2 = undefined;
