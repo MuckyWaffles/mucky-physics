@@ -14,7 +14,7 @@ fn renderParticle(self: *p.Particle) void {
     //rl.drawCircleLinesV(self.position, self.radius + 6, .red);
     rl.drawCircleV(self.position, self.radius, .white);
 
-    if (showMass) {
+    if (Options.showMass) {
         rl.drawText(
             rl.textFormat("%.2f", .{self.mass - @mod(self.mass, 0.01)}),
             @intFromFloat(self.position.x),
@@ -41,22 +41,36 @@ fn newParticle(position: rl.Vector2, mass: f32) error{NoSpace}!*p.Particle {
     return error.NoSpace;
 }
 
-fn constrainParticleToScreen(particle: *p.Particle) void {
+fn periodicBoundary(particle: *p.Particle) void {
+    if (particle.position.y > screenHeight) {
+        particle.position.y -= screenHeight;
+        particle.previous.y -= screenHeight;
+    } else if (particle.position.y < 0.0) {
+        particle.position.y += screenHeight;
+        particle.previous.y += screenHeight;
+    }
+    if (particle.position.x > screenWidth) {
+        particle.position.x -= screenWidth;
+        particle.previous.x -= screenWidth;
+    } else if (particle.position.x < 0.0) {
+        particle.position.x += screenWidth;
+        particle.previous.x += screenWidth;
+    }
+}
+fn nonPeriodicBoundary(particle: *p.Particle) void {
     const velocity = particle.position.subtract(particle.previous);
 
     if (particle.position.y + particle.radius > screenHeight) {
         particle.position.y = screenHeight - particle.radius;
         particle.previous.y = particle.position.y + velocity.y;
-    }
-    if (particle.position.y - particle.radius < 0) {
+    } else if (particle.position.y - particle.radius < 0) {
         particle.position.y = particle.radius;
         particle.previous.y = particle.position.y + velocity.y;
     }
     if (particle.position.x + particle.radius > screenWidth) {
         particle.position.x = screenWidth - particle.radius;
         particle.previous.x = particle.position.x + velocity.x;
-    }
-    if (particle.position.x - particle.radius < 0) {
+    } else if (particle.position.x - particle.radius < 0) {
         particle.position.x = particle.radius;
         particle.previous.x = particle.position.x + velocity.x;
     }
@@ -159,8 +173,8 @@ fn physics_process() !void {
     e3.normal = rl.Vector2{ .x = 0.098, .y = -0.49 };
 
     for (0..400) |_| {
-        const spawnX: f32 = @floatFromInt(rl.getRandomValue(0, @intFromFloat(screenWidth)));
-        const spawnY: f32 = @floatFromInt(rl.getRandomValue(50, @intFromFloat(screenHeight)));
+        const spawnX = rand.float(f32) * @as(f32, @floatFromInt(screenWidth));
+        const spawnY = rand.float(f32) * @as(f32, @floatFromInt(screenWidth));
         const mass = 0.8 + rand.float(f32) * 0.60;
         _ = try newParticle(rl.Vector2{ .x = spawnX, .y = spawnY }, mass);
     }
@@ -175,7 +189,9 @@ fn physics_process() !void {
         for (&p.particles) |*particle| {
             if (!particle.inUse) continue;
             particle.update();
-            constrainParticleToScreen(particle);
+            if (Options.periodicBoundary) {
+                periodicBoundary(particle);
+            } else nonPeriodicBoundary(particle);
         }
         for (&p.constraints) |*constraint| {
             if (!constraint.inUse) continue;
@@ -242,8 +258,12 @@ pub fn main() anyerror!void {
     }
 }
 
-var enableUI = false;
-var showMass = false;
+const Options = struct {
+    var enableUI = false;
+    var showMass = false;
+    var periodicBoundary = true;
+};
+
 fn drawUI() void {
     if (rg.button(rl.Rectangle{
         .x = 10,
@@ -251,11 +271,11 @@ fn drawUI() void {
         .width = 60,
         .height = 24,
     }, "Toggle UI")) {
-        enableUI = !enableUI;
+        Options.enableUI = !Options.enableUI;
     }
 
     // Exit if UI isn't enabled
-    if (!enableUI) return;
+    if (!Options.enableUI) return;
 
     const windowRect = rl.Rectangle{
         .x = screenWidth - 220,
@@ -272,6 +292,16 @@ fn drawUI() void {
             .height = 20,
         },
         "Show Mass",
-        &showMass,
+        &Options.showMass,
+    );
+    _ = rg.checkBox(
+        rl.Rectangle{
+            .x = windowRect.x + 10,
+            .y = windowRect.y + 60,
+            .width = 60,
+            .height = 20,
+        },
+        "Periodic Boundaries",
+        &Options.periodicBoundary,
     );
 }
