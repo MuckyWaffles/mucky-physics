@@ -264,9 +264,11 @@ pub fn main() anyerror!void {
             if (!constraint.inUse) continue;
             renderConstraint(constraint);
         }
-        for (&p.edges) |*edge| {
-            if (!edge.inUse) continue;
-            renderEdge(edge);
+        if (p.Options.edges) {
+            for (&p.edges) |*edge| {
+                if (!edge.inUse) continue;
+                renderEdge(edge);
+            }
         }
         drawUI();
     }
@@ -298,10 +300,31 @@ fn drawUI() void {
         .height = 400,
     };
     _ = rg.windowBox(windowRect, "Menu");
+
     _ = rg.checkBox(
         rl.Rectangle{
             .x = windowRect.x + 10,
             .y = windowRect.y + 35,
+            .width = 60,
+            .height = 20,
+        },
+        "Enable Gravity",
+        &p.Options.gravity,
+    );
+    _ = rg.checkBox(
+        rl.Rectangle{
+            .x = windowRect.x + 10,
+            .y = windowRect.y + 60,
+            .width = 60,
+            .height = 20,
+        },
+        "Enable Edges",
+        &p.Options.edges,
+    );
+    _ = rg.checkBox(
+        rl.Rectangle{
+            .x = windowRect.x + 10,
+            .y = windowRect.y + 85,
             .width = 60,
             .height = 20,
         },
@@ -311,7 +334,7 @@ fn drawUI() void {
     _ = rg.checkBox(
         rl.Rectangle{
             .x = windowRect.x + 10,
-            .y = windowRect.y + 60,
+            .y = windowRect.y + 110,
             .width = 60,
             .height = 20,
         },

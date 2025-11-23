@@ -17,6 +17,11 @@ pub var constraints: [constraintLimit]Constraint = undefined;
 const edgeLimit: u16 = 20;
 pub var edges: [edgeLimit]Edge = undefined;
 
+pub const Options = struct {
+    pub var gravity = true;
+    pub var edges = true;
+};
+
 /// Particle with Verlet Integration
 pub const Particle = struct {
     inUse: bool = false,
@@ -30,7 +35,7 @@ pub const Particle = struct {
 
     /// Update using Verlet integration
     pub fn integrate(self: *Particle) void {
-        self.force.y += gravity * self.mass;
+        if (Options.gravity) self.force.y += gravity * self.mass;
 
         const position = self.position;
         const previous = self.previous;
@@ -127,6 +132,7 @@ pub const Particle = struct {
             }
         }
 
+        if (!Options.edges) return;
         for (edges) |edge| {
             var contact: rl.Vector2 = undefined;
             if (getLineIntersection(
