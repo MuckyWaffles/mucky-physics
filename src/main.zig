@@ -186,12 +186,23 @@ fn physics_process() !void {
     while (!rl.windowShouldClose()) {
         const startTime = rl.getTime();
 
-        for (&p.particles) |*particle| {
+        for (&p.particles, 0..) |*particle, i| {
             if (!particle.inUse) continue;
+
             particle.integrate();
+
             if (Options.periodicBoundary) {
                 periodicBoundary(particle);
             } else nonPeriodicBoundary(particle);
+
+            // Update image particles;
+            p.particlesLeft[i] = particle.*;
+            p.particlesLeft[i].position.x -= screenWidth;
+            p.particlesLeft[i].previous.x -= screenWidth;
+            p.particlesRight[i] = particle.*;
+            p.particlesRight[i].position.x += screenWidth;
+            p.particlesRight[i].previous.x += screenWidth;
+
             particle.collide();
         }
         for (&p.constraints) |*constraint| {
@@ -243,9 +254,11 @@ pub fn main() anyerror!void {
 
         rl.clearBackground(.black);
 
-        for (&p.particles) |*particle| {
+        for (&p.particles, 0..) |*particle, i| {
             if (!particle.inUse) continue;
             renderParticle(particle);
+            renderParticle(&p.particlesLeft[i]);
+            renderParticle(&p.particlesRight[i]);
         }
         for (&p.constraints) |*constraint| {
             if (!constraint.inUse) continue;

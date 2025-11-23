@@ -8,6 +8,8 @@ const gravity: f32 = 200.0;
 
 const particleLimit: u16 = 600;
 pub var particles: [particleLimit]Particle = undefined;
+pub var particlesLeft: [particleLimit]Particle = undefined;
+pub var particlesRight: [particleLimit]Particle = undefined;
 
 const constraintLimit: u16 = 20;
 pub var constraints: [constraintLimit]Constraint = undefined;
@@ -49,7 +51,58 @@ pub const Particle = struct {
     }
 
     pub fn collide(self: *Particle) void {
+        // Main particles
         for (&particles) |*particle| {
+            if (!particle.inUse) continue;
+            if (particle.position.x == self.position.x and
+                particle.position.y == self.position.y)
+            {
+                continue;
+            }
+            const length = self.radius + particle.radius;
+            const delta = self.position.subtract(particle.position);
+            const deltaLength = math.hypot(delta.x, delta.y);
+            if (deltaLength > 0 and deltaLength < length) {
+                const diff = (deltaLength - length) / deltaLength;
+                if (math.isNan(diff)) return;
+
+                const startAlpha = 1.0 / particle.mass;
+                const endAlpha = 1.0 / self.mass;
+                const strength = 0.10;
+
+                particle.position.x += delta.x * diff * strength * startAlpha;
+                particle.position.y += delta.y * diff * strength * startAlpha;
+                self.position.x -= delta.x * diff * strength * endAlpha;
+                self.position.y -= delta.y * diff * strength * endAlpha;
+            }
+        }
+        // Left images
+        for (&particlesLeft) |*particle| {
+            if (!particle.inUse) continue;
+            if (particle.position.x == self.position.x and
+                particle.position.y == self.position.y)
+            {
+                continue;
+            }
+            const length = self.radius + particle.radius;
+            const delta = self.position.subtract(particle.position);
+            const deltaLength = math.hypot(delta.x, delta.y);
+            if (deltaLength > 0 and deltaLength < length) {
+                const diff = (deltaLength - length) / deltaLength;
+                if (math.isNan(diff)) return;
+
+                const startAlpha = 1.0 / particle.mass;
+                const endAlpha = 1.0 / self.mass;
+                const strength = 0.10;
+
+                particle.position.x += delta.x * diff * strength * startAlpha;
+                particle.position.y += delta.y * diff * strength * startAlpha;
+                self.position.x -= delta.x * diff * strength * endAlpha;
+                self.position.y -= delta.y * diff * strength * endAlpha;
+            }
+        }
+        // Left images
+        for (&particlesRight) |*particle| {
             if (!particle.inUse) continue;
             if (particle.position.x == self.position.x and
                 particle.position.y == self.position.y)
