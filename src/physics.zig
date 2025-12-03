@@ -18,9 +18,33 @@ const edgeLimit: u16 = 20;
 pub var edges: [edgeLimit]Edge = undefined;
 
 pub const Options = struct {
-    pub var gravity = true;
-    pub var edges = true;
+    pub var gravity = false;
+    pub var edges = false;
+    pub var drag = false;
 };
+
+/// Collide particles of equal mass
+pub fn collideParticles(b: *Particle, a: *Particle) void {
+    const v1 = a.position.subtract(a.previous);
+    const v2 = b.position.subtract(b.previous);
+
+    const n = rl.Vector2.subtract(a.position, b.position).normalize();
+
+    // How aligned the velocity is with the normal
+    const rel = v1.subtract(v2);
+    const alignment = rel.dotProduct(n);
+
+    // if alignment is > 0, then particles are moving away
+    if (alignment > 0) return;
+
+    // 3. Apply velocity swap along the normal
+    const v1p = v1.subtract(n.scale(alignment));
+    const v2p = v2.add(n.scale(alignment));
+
+    // 4. Update previous positions for Verlet
+    a.previous = a.position.subtract(v1p);
+    b.previous = b.position.subtract(v2p);
+}
 
 /// Particle with Verlet Integration
 pub const Particle = struct {
@@ -41,9 +65,11 @@ pub const Particle = struct {
         const previous = self.previous;
         var vel = position.subtract(previous);
 
-        const velMag = std.math.hypot(vel.x, vel.y);
-        const drag = 0.001 * 0.5 * velMag * velMag;
-        vel = rl.Vector2.scale(vel.normalize(), velMag - drag);
+        if (Options.drag) {
+            const velMag = std.math.hypot(vel.x, vel.y);
+            const drag = 0.001 * 0.5 * velMag * velMag;
+            vel = rl.Vector2.scale(vel.normalize(), velMag - drag);
+        }
 
         self.accel = self.accel.add(self.force.scale(1 / self.mass));
         self.force = rl.Vector2{ .x = 0, .y = 0 };
@@ -56,80 +82,75 @@ pub const Particle = struct {
     }
 
     pub fn collide(self: *Particle) void {
+        // Collision Strength
+        const strength = 1.00;
+
         // Main particles
         for (&particles) |*particle| {
             if (!particle.inUse) continue;
-            if (particle.position.x == self.position.x and
-                particle.position.y == self.position.y)
-            {
-                continue;
-            }
-            const length = self.radius + particle.radius;
-            const delta = self.position.subtract(particle.position);
-            const deltaLength = math.hypot(delta.x, delta.y);
-            if (deltaLength > 0 and deltaLength < length) {
-                const diff = (deltaLength - length) / deltaLength;
-                if (math.isNan(diff)) return;
 
-                const startAlpha = 1.0 / particle.mass;
-                const endAlpha = 1.0 / self.mass;
-                const strength = 0.10;
+            // const length = self.radius + particle.radius;
+            // const delta = self.position.subtract(particle.position);
+            // const deltaLength = math.hypot(delta.x, delta.y);
+            // if (deltaLength > 0 and deltaLength < length) {
+            // const diff = (deltaLength - length) / deltaLength;
+            // if (math.isNan(diff)) return;
 
-                particle.position.x += delta.x * diff * strength * startAlpha;
-                particle.position.y += delta.y * diff * strength * startAlpha;
-                self.position.x -= delta.x * diff * strength * endAlpha;
-                self.position.y -= delta.y * diff * strength * endAlpha;
-            }
+            // const startAlpha = 1.0 / particle.mass;
+            // const endAlpha = 1.0 / self.mass;
+
+            // particle.position.x += delta.x * diff * strength * startAlpha;
+            // particle.position.y += delta.y * diff * strength * startAlpha;
+            // self.position.x -= delta.x * diff * strength * endAlpha;
+            // self.position.y -= delta.y * diff * strength * endAlpha;
+
+            // }
+
+            collideParticles(self, particle);
         }
         // Left images
         for (&particlesLeft) |*particle| {
             if (!particle.inUse) continue;
-            if (particle.position.x == self.position.x and
-                particle.position.y == self.position.y)
-            {
-                continue;
-            }
-            const length = self.radius + particle.radius;
-            const delta = self.position.subtract(particle.position);
-            const deltaLength = math.hypot(delta.x, delta.y);
-            if (deltaLength > 0 and deltaLength < length) {
-                const diff = (deltaLength - length) / deltaLength;
-                if (math.isNan(diff)) return;
 
-                const startAlpha = 1.0 / particle.mass;
-                const endAlpha = 1.0 / self.mass;
-                const strength = 0.10;
+            // const length = self.radius + particle.radius;
+            // const delta = self.position.subtract(particle.position);
+            // const deltaLength = math.hypot(delta.x, delta.y);
+            // if (deltaLength > 0 and deltaLength < length) {
+            // const diff = (deltaLength - length) / deltaLength;
+            // if (math.isNan(diff)) return;
 
-                particle.position.x += delta.x * diff * strength * startAlpha;
-                particle.position.y += delta.y * diff * strength * startAlpha;
-                self.position.x -= delta.x * diff * strength * endAlpha;
-                self.position.y -= delta.y * diff * strength * endAlpha;
-            }
+            // const startAlpha = 1.0 / particle.mass;
+            // const endAlpha = 1.0 / self.mass;
+
+            // particle.position.x += delta.x * diff * strength * startAlpha;
+            // particle.position.y += delta.y * diff * strength * startAlpha;
+            // self.position.x -= delta.x * diff * strength * endAlpha;
+            // self.position.y -= delta.y * diff * strength * endAlpha;
+            // }
+
+            collideParticles(self, particle);
         }
         // Left images
         for (&particlesRight) |*particle| {
             if (!particle.inUse) continue;
-            if (particle.position.x == self.position.x and
-                particle.position.y == self.position.y)
-            {
-                continue;
-            }
-            const length = self.radius + particle.radius;
-            const delta = self.position.subtract(particle.position);
-            const deltaLength = math.hypot(delta.x, delta.y);
-            if (deltaLength > 0 and deltaLength < length) {
-                const diff = (deltaLength - length) / deltaLength;
-                if (math.isNan(diff)) return;
 
-                const startAlpha = 1.0 / particle.mass;
-                const endAlpha = 1.0 / self.mass;
-                const strength = 0.10;
+            // const length = self.radius + particle.radius;
+            // const delta = self.position.subtract(particle.position);
+            // const deltaLength = math.hypot(delta.x, delta.y);
+            // if (deltaLength > 0 and deltaLength < length) {
+            // const diff = (deltaLength - length) / deltaLength;
+            // if (math.isNan(diff)) return;
 
-                particle.position.x += delta.x * diff * strength * startAlpha;
-                particle.position.y += delta.y * diff * strength * startAlpha;
-                self.position.x -= delta.x * diff * strength * endAlpha;
-                self.position.y -= delta.y * diff * strength * endAlpha;
-            }
+            // const startAlpha = 1.0 / particle.mass;
+            // const endAlpha = 1.0 / self.mass;
+
+            // particle.position.x += delta.x * diff * strength * startAlpha;
+            // particle.position.y += delta.y * diff * strength * startAlpha;
+            // self.position.x -= delta.x * diff * strength * endAlpha;
+            // self.position.y -= delta.y * diff * strength * endAlpha;
+            // }
+
+            collideParticles(self, particle);
         }
 
         if (!Options.edges) return;

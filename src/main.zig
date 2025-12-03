@@ -136,23 +136,23 @@ fn physics_process() !void {
     const rand = prng.random();
 
     // Creating particles and constraints
-    const mouseParticle = try newParticle(rl.getMousePosition(), 9999);
+    const mouseParticle = try newParticle(rl.getMousePosition(), 99);
 
-    const p1 = try newParticle(rl.Vector2{ .x = 100, .y = 200 }, 1.0);
-    const p2 = try newParticle(rl.Vector2{ .x = 300, .y = 250 }, 2.0);
-    _ = try newConstraint(p1, p2, 100.0, 0.0005, .pull);
+    // const p1 = try newParticle(rl.Vector2{ .x = 100, .y = 200 }, 1.0);
+    // const p2 = try newParticle(rl.Vector2{ .x = 300, .y = 250 }, 2.0);
+    // _ = try newConstraint(p1, p2, 100.0, 0.0005, .pull);
 
-    const s1 = try newParticle(rl.Vector2{ .x = 200, .y = 200 }, 1.0);
-    const s2 = try newParticle(rl.Vector2{ .x = 300, .y = 200 }, 1.0);
-    const s3 = try newParticle(rl.Vector2{ .x = 300, .y = 300 }, 1.0);
-    const s4 = try newParticle(rl.Vector2{ .x = 200, .y = 300 }, 1.0);
-    const boxStrength = 0.05;
-    _ = try newConstraint(s1, s2, 100.0, boxStrength, .both);
-    _ = try newConstraint(s2, s3, 100.0, boxStrength, .both);
-    _ = try newConstraint(s3, s4, 100.0, boxStrength, .both);
-    _ = try newConstraint(s4, s1, 100.0, boxStrength, .both);
-    _ = try newConstraint(s1, s3, math.hypot(100.0, 100.0), boxStrength, .both);
-    _ = try newConstraint(s4, s2, math.hypot(100.0, 100.0), boxStrength, .both);
+    // const s1 = try newParticle(rl.Vector2{ .x = 200, .y = 200 }, 1.0);
+    // const s2 = try newParticle(rl.Vector2{ .x = 300, .y = 200 }, 1.0);
+    // const s3 = try newParticle(rl.Vector2{ .x = 300, .y = 300 }, 1.0);
+    // const s4 = try newParticle(rl.Vector2{ .x = 200, .y = 300 }, 1.0);
+    // const boxStrength = 0.05;
+    // _ = try newConstraint(s1, s2, 100.0, boxStrength, .both);
+    // _ = try newConstraint(s2, s3, 100.0, boxStrength, .both);
+    // _ = try newConstraint(s3, s4, 100.0, boxStrength, .both);
+    // _ = try newConstraint(s4, s1, 100.0, boxStrength, .both);
+    // _ = try newConstraint(s1, s3, math.hypot(100.0, 100.0), boxStrength, .both);
+    // _ = try newConstraint(s4, s2, math.hypot(100.0, 100.0), boxStrength, .both);
 
     _ = try newEdge(
         rl.Vector2{ .x = screenWidth * 0.25, .y = screenHeight - 40 },
@@ -172,15 +172,22 @@ fn physics_process() !void {
     e3.start.y -= 50;
     e3.normal = rl.Vector2{ .x = 0.098, .y = -0.49 };
 
-    for (0..400) |_| {
+    for (0..20) |_| {
         const spawnX = rand.float(f32) * @as(f32, @floatFromInt(screenWidth));
         const spawnY = rand.float(f32) * @as(f32, @floatFromInt(screenWidth));
-        const mass = 0.8 + rand.float(f32) * 0.60;
-        _ = try newParticle(rl.Vector2{ .x = spawnX, .y = spawnY }, mass);
+        // const mass = 0.8 + rand.float(f32) * 0.60;
+        const mass = 1.0;
+        var new = try newParticle(rl.Vector2{ .x = spawnX, .y = spawnY }, mass);
+        new.previous.x -= rand.float(f32);
+        new.previous.y -= rand.float(f32);
     }
+    // const p1 = try newParticle(rl.Vector2{ .x = 10, .y = screenHeight / 2 }, 1.0);
+    // const p2 = try newParticle(rl.Vector2{ .x = screenWidth - 10, .y = screenHeight / 2 }, 1.0);
+    // p1.previous.x -= 1.0;
+    // p2.previous.x += 1.0;
 
     // Creating particle that follows mouse
-    const mouseDrag = try newConstraint(mouseParticle, s1, 0.0, 0.002, .both);
+    // const mouseDrag = try newConstraint(mouseParticle, s1, 0.0, 0.002, .both);
 
     // Physics loop
     while (!rl.windowShouldClose()) {
@@ -207,18 +214,21 @@ fn physics_process() !void {
         }
         for (&p.constraints) |*constraint| {
             if (!constraint.inUse) continue;
+            if (!Options.constraints) continue;
             constraint.satisfy();
         }
 
-        mouseParticle.position = rl.getMousePosition();
-        mouseDrag.strength = 0.0;
+        _ = mouseParticle;
+        //mouseParticle.position = rl.getMousePosition();
+        //mouseParticle.previous = rl.getMousePosition();
+        // mouseDrag.strength = 0.0;
         if (rl.isMouseButtonDown(rl.MouseButton.left)) {
             for (&p.particles) |*particle| {
                 if (!particle.inUse) continue;
                 const delta = rl.getMousePosition().subtract(particle.position);
                 const dist = math.hypot(delta.x, delta.y);
 
-                mouseDrag.strength = 0.002;
+                // mouseDrag.strength = 0.002;
                 _ = dist;
                 //if (dist > particle.radius + 6) continue;
             }
@@ -254,14 +264,23 @@ pub fn main() anyerror!void {
 
         rl.clearBackground(.black);
 
+        var totalVelocity = rl.Vector2{ .x = 0, .y = 0 };
+        var totalVelocityScalar: f32 = 0.0;
+
         for (&p.particles, 0..) |*particle, i| {
             if (!particle.inUse) continue;
+
+            const vel = rl.Vector2.subtract(particle.position, particle.previous);
+            totalVelocity = totalVelocity.add(vel);
+            totalVelocityScalar += vel.length();
+
             renderParticle(particle);
             renderParticle(&p.particlesLeft[i]);
             renderParticle(&p.particlesRight[i]);
         }
         for (&p.constraints) |*constraint| {
             if (!constraint.inUse) continue;
+            if (!Options.constraints) continue;
             renderConstraint(constraint);
         }
         if (p.Options.edges) {
@@ -270,6 +289,24 @@ pub fn main() anyerror!void {
                 renderEdge(edge);
             }
         }
+
+        // Draw total velocity
+        rl.drawText(
+            rl.textFormat("Total Velocity: (%.2f, %.2f)", .{ totalVelocity.x, totalVelocity.y }),
+            10,
+            40,
+            18,
+            .light_gray,
+        );
+        // Draw total velocity
+        rl.drawText(
+            rl.textFormat("Total Scalar Velocity: %.2f", .{totalVelocityScalar}),
+            10,
+            55,
+            18,
+            .light_gray,
+        );
+
         drawUI();
     }
 }
@@ -278,6 +315,7 @@ const Options = struct {
     var enableUI = false;
     var showMass = false;
     var periodicBoundary = true;
+    var constraints = true;
 };
 
 fn drawUI() void {
@@ -293,18 +331,18 @@ fn drawUI() void {
     // Exit if UI isn't enabled
     if (!Options.enableUI) return;
 
-    const windowRect = rl.Rectangle{
+    const winRect = rl.Rectangle{
         .x = screenWidth - 220,
         .y = 10,
         .width = 200,
         .height = 400,
     };
-    _ = rg.windowBox(windowRect, "Menu");
+    _ = rg.windowBox(winRect, "Menu");
 
     _ = rg.checkBox(
         rl.Rectangle{
-            .x = windowRect.x + 10,
-            .y = windowRect.y + 35,
+            .x = winRect.x + 10,
+            .y = winRect.y + 35,
             .width = 60,
             .height = 20,
         },
@@ -313,8 +351,8 @@ fn drawUI() void {
     );
     _ = rg.checkBox(
         rl.Rectangle{
-            .x = windowRect.x + 10,
-            .y = windowRect.y + 60,
+            .x = winRect.x + 10,
+            .y = winRect.y + 60,
             .width = 60,
             .height = 20,
         },
@@ -323,8 +361,8 @@ fn drawUI() void {
     );
     _ = rg.checkBox(
         rl.Rectangle{
-            .x = windowRect.x + 10,
-            .y = windowRect.y + 85,
+            .x = winRect.x + 10,
+            .y = winRect.y + 85,
             .width = 60,
             .height = 20,
         },
@@ -333,12 +371,32 @@ fn drawUI() void {
     );
     _ = rg.checkBox(
         rl.Rectangle{
-            .x = windowRect.x + 10,
-            .y = windowRect.y + 110,
+            .x = winRect.x + 10,
+            .y = winRect.y + 110,
             .width = 60,
             .height = 20,
         },
         "Periodic Boundaries",
         &Options.periodicBoundary,
+    );
+    _ = rg.checkBox(
+        rl.Rectangle{
+            .x = winRect.x + 10,
+            .y = winRect.y + 135,
+            .width = 60,
+            .height = 20,
+        },
+        "Enable Contraints",
+        &Options.constraints,
+    );
+    _ = rg.checkBox(
+        rl.Rectangle{
+            .x = winRect.x + 10,
+            .y = winRect.y + 160,
+            .width = 60,
+            .height = 20,
+        },
+        "Enable Drag",
+        &p.Options.drag,
     );
 }
