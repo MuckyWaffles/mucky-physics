@@ -55,6 +55,7 @@ fn main() {
         particles[i].active = false;
     }
 
+    // You know what I really like Rust syntax
     let (mut rl, thread) = raylib::init()
         .size(SCREEN_WIDTH, SCREEN_HEIGHT)
         .title("Mucky Physics")
