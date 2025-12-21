@@ -1,7 +1,7 @@
 use raylib::prelude::*;
 
 pub struct Particle {
-    active: bool,
+    alive: bool,
 
     pub pos: Vector2,
     pub vel: Vector2,
@@ -14,7 +14,7 @@ pub struct Particle {
 impl Particle {
     pub fn new(pos: Vector2) -> Particle {
         Particle {
-            active: true,
+            alive: true,
             pos,
             vel: Vector2 { x: 0.0, y: 0.0 },
             acc: Vector2 { x: 0.0, y: 0.0 },
@@ -25,8 +25,8 @@ impl Particle {
     }
     pub fn integrate(&mut self, dt: f32) {
         let new_pos = self.pos + self.vel * dt + self.acc * (dt * dt * 0.5);
-        let new_acc = self.acc + self.apply_forces();
-        let new_vel = self.vel + new_acc * (dt * 0.5);
+        let new_acc = self.apply_forces();
+        let new_vel = self.vel + (self.acc + new_acc) * (dt * 0.5);
         self.pos = new_pos;
         self.vel = new_vel;
         self.acc = new_acc;
@@ -35,10 +35,50 @@ impl Particle {
         self.force / self.mass
     }
 
-    pub fn is_active(&self) -> bool {
-        self.active
+    pub fn is_alive(&self) -> bool {
+        self.alive
     }
     pub fn end(&mut self) {
-        self.active = false;
+        self.alive = false;
+    }
+
+    pub fn collide(a: &mut Particle, b: &mut Particle) {
+        // This has taken me such a long time to figure out...
+        // Gaze, at my glorious creation!
+
+        let delta = b.pos - a.pos;
+        let dist = delta.length();
+        let overlap = (a.radius + b.radius) - dist;
+
+        // Check if there's any collision in the first place
+        if overlap > 0.0 {
+            let norm = delta / dist;
+
+            // How aligned the velocity is with the normal
+            let alignment = (a.vel - b.vel).dot(norm);
+
+            // If alignment is < 0, then particles are separating
+            // Otherwise we get some strange collision artifacts...
+            if alignment < 0.0 {
+                return;
+            }
+
+            // Part of the velocity along normal
+            let avn = norm * a.vel.dot(norm);
+            let bvn = norm * b.vel.dot(norm);
+
+            // Part of the velocity that lies
+            // perpendicular to the collision normal
+            let avt = a.vel - avn;
+            let bvt = b.vel - bvn;
+
+            // Get vel' by swapping vel along normal
+            let avelnew = avt + bvn;
+            let bvelnew = bvt + avn;
+
+            // We did it!
+            a.vel = avelnew;
+            b.vel = bvelnew;
+        }
     }
 }
