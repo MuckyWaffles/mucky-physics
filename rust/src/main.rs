@@ -2,35 +2,18 @@ use rand::prelude::*;
 use raylib::prelude::*;
 mod physics;
 use physics::Particle;
+use std::thread;
+use std::time::Duration;
+use std::sync::mpsc;
 
 const SCREEN_WIDTH: i32 = 1000;
-const SCREEN_HEIGHT: i32 = 600;
+const SCREEN_HEIGHT: i32 = 800;
 
-// TODO: Make this a packed pool
-const PARTICLE_LIMIT: usize = 1000;
-fn new_particle(particles: &mut Vec<Particle>, pos: Vector2) -> Option<&mut Particle> {
-    for particle in particles.iter_mut().filter(|p| p.is_alive()) {
-        *particle = Particle::new(pos);
-        return Some(particle);
-    }
-
-    None // no free particle available
-}
-
-fn render_particle(d: &mut RaylibDrawHandle, particle: &mut Particle) -> () {
-    d.draw_circle_v(particle.pos, particle.radius, Color::WHITE)
-}
+const PARTICLE_LIMIT: usize = 2000;
 
 const GRAVITY: f32 = 10.0;
 
 fn main() {
-    // Creating empty particle array
-    let mut particles = Vec::with_capacity(PARTICLE_LIMIT);
-    for i in 0..PARTICLE_LIMIT {
-        particles.push(Particle::new(Vector2 { x: 0.0, y: 0.0 }));
-        particles[i].end();
-    }
-
     // You know what I really like Rust syntax
     let (mut rl, thread) = raylib::init()
         .size(SCREEN_WIDTH, SCREEN_HEIGHT)
@@ -38,18 +21,49 @@ fn main() {
         .msaa_4x()
         .build();
 
-    rl.set_target_fps(60);
-    let dt = 1.0 / 60.0;
+    rl.set_target_fps(75);
+
+	// create send/receiver cars to move data
+	let (tx, rx) = mpsc::channel();
+    thread::spawn(|| physics_thread(tx));
+
+    while !rl.window_should_close() {
+    	let particles = rx.recv().unwrap();
+
+        let mut d = rl.begin_drawing(&thread);
+
+        d.clear_background(Color::BLACK);
+
+        // Render every particle
+        for particle in particles.iter() {
+            render_particle(&mut d, particle);
+        }
+    }
+}
+
+struct RenderParticle {
+    pos: Vector2,
+    radius: f32,
+}
+
+fn physics_thread(tx: mpsc::Sender<Vec<RenderParticle>>) {
+    let dt = 0.01;
+
+    // Creating empty particle array
+    let mut particles = Vec::with_capacity(PARTICLE_LIMIT);
+    for i in 0..PARTICLE_LIMIT {
+        particles.push(Particle::new(Vector2 { x: 0.0, y: 0.0 }));
+    }
 
     //let _ = new_particle(&mut particles, Vector2 { x: 100.0, y: 100.0 }).unwrap();
 
     let mut rng = rand::rng();
     let mut particles_alive: usize = 0;
     // This code is kinda sloppy but whatevs
-    for _i in 0..100 {
+    for _i in 0..200 {
         particles[particles_alive] = Particle::new(Vector2 {
             x: rng.random_range(10.0..1000.0 - 10.0),
-            y: rng.random_range(10.0..600.0 - 10.0),
+            y: rng.random_range(10.0..800.0 - 10.0),
         });
         // Give new particles a starting velocity in a random direction
         let rand_dir = Vector2 {
@@ -59,13 +73,13 @@ fn main() {
         .normalized();
 
         particles[particles_alive].vel = Vector2 {
-            x: rand_dir.x * 40.0,
-            y: rand_dir.y * 40.0,
+            x: rand_dir.x * 80.0,
+            y: rand_dir.y * 80.0,
         };
         particles_alive += 1;
-    }
-
-    while !rl.window_should_close() {
+    }  
+    
+    loop {
         // Update every particle
         for part in particles[0..particles_alive].iter_mut() {
             //part.force.y += GRAVITY * part.mass;
@@ -91,21 +105,26 @@ fn main() {
         // TODO: make a new collision detection system
         // with separate broad-phase and narrow-phase for optimization
         for i in 0..particles_alive {
-            // Woah, Rust is weird sometimes...
             // We split here so we never iterate over the same two particles twice
             let (left, right) = particles[..particles_alive].split_at_mut(i + 1);
             let a = &mut left[i];
 
             right.iter_mut().for_each(|b| Particle::collide(a, b));
         }
-
-        let mut d = rl.begin_drawing(&thread);
-
-        d.clear_background(Color::BLACK);
-
-        // Render every particle
-        for particle in particles.iter_mut().filter(|p| p.is_alive()) {
-            render_particle(&mut d, particle);
-        }
+        
+        let snapshot: Vec<RenderParticle> = particles[0..particles_alive]
+        	.iter()
+        	.map(|p| RenderParticle {
+            	pos: p.pos,
+            	radius: p.radius,
+        	})
+        	.collect();
+        tx.send(snapshot).unwrap();
+        
+        thread::sleep(Duration::from_millis(10));
     }
+}
+
+fn render_particle(d: &mut RaylibDrawHandle, particle: &RenderParticle) -> () {
+    d.draw_circle_v(particle.pos, particle.radius, Color::WHITE)
 }

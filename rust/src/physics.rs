@@ -1,8 +1,6 @@
 use raylib::prelude::*;
 
 pub struct Particle {
-    alive: bool,
-
     pub pos: Vector2,
     pub vel: Vector2,
     pub acc: Vector2,
@@ -14,7 +12,6 @@ pub struct Particle {
 impl Particle {
     pub fn new(pos: Vector2) -> Particle {
         Particle {
-            alive: true,
             pos,
             vel: Vector2 { x: 0.0, y: 0.0 },
             acc: Vector2 { x: 0.0, y: 0.0 },
@@ -33,13 +30,6 @@ impl Particle {
     }
     fn apply_forces(&self) -> Vector2 {
         self.force / self.mass
-    }
-
-    pub fn is_alive(&self) -> bool {
-        self.alive
-    }
-    pub fn end(&mut self) {
-        self.alive = false;
     }
 
     pub fn collide(a: &mut Particle, b: &mut Particle) {
