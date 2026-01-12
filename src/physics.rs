@@ -17,7 +17,7 @@ impl Particle {
             acc: Vector2 { x: 0.0, y: 0.0 },
             force: Vector2 { x: 0.0, y: 0.0 },
             mass: 1.0,
-            radius: 10.0,
+            radius: 6.0,
         }
     }
     pub fn integrate(&mut self, dt: f32) {
