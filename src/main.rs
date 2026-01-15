@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 const SCREEN_WIDTH: i32 = 1400;
 const SCREEN_HEIGHT: i32 = 800;
 
-const PARTICLE_LIMIT: usize = 2000;
+const PARTICLE_LIMIT: usize = 10000;
 
 const GRAVITY: f32 = 10.0;
 
@@ -47,9 +47,13 @@ fn main() {
             data.total_vector_vel.x, data.total_vector_vel.y,
         );
         let str2 = format!("Total Scalar Velocity: ({})", data.total_scalar_vel);
+        let str3 = format!("Computation time (ms): {}", data.elapsed_time);
+        let str4 = format!("Particle collision time (ms): {}", data.collision_time);
 
         d.draw_text(&str, 10, 40, 18, Color::LIGHTGRAY);
         d.draw_text(&str2, 10, 80, 18, Color::LIGHTGRAY);
+        d.draw_text(&str3, 10, 120, 18, Color::LIGHTGRAY);
+        d.draw_text(&str4, 10, 160, 18, Color::LIGHTGRAY);
     }
 }
 
@@ -77,9 +81,13 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
         x: SCREEN_WIDTH as f32 / 2.0 + 400.0,
         y: SCREEN_HEIGHT as f32 / 2.0,
     };
-    for _i in 0..1000 {
+    for _i in 0..4000 {
+        // particles[particles_alive] = Particle::new(Vector2 {
+        //     x: rng.random_range(screen_half.x - 120.0..screen_half.x + 120.0),
+        //     y: rng.random_range(screen_half.y - 100.0..screen_half.y + 100.0),
+        // });
         particles[particles_alive] = Particle::new(Vector2 {
-            x: rng.random_range(screen_half.x - 120.0..screen_half.x + 120.0),
+            x: rng.random_range(10.0..SCREEN_WIDTH as f32 - 10.0),
             y: rng.random_range(screen_half.y - 100.0..screen_half.y + 100.0),
         });
         // Give new particles a starting velocity in a random direction
@@ -102,37 +110,8 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
         width: 260.0,
         height: 180.0,
     };
-    let mut walls = Vec::with_capacity(5);
-    walls.push(Rectangle {
-        x: ship.x - 20.0,
-        y: ship.y,
-        width: 20.0,
-        height: ship.height,
-    });
-    walls.push(Rectangle {
-        x: ship.x,
-        y: ship.y - 20.0,
-        width: ship.width,
-        height: 20.0,
-    });
-    walls.push(Rectangle {
-        x: ship.x,
-        y: ship.y + ship.height,
-        width: ship.width,
-        height: 20.0,
-    });
-    walls.push(Rectangle {
-        x: ship.x + ship.width,
-        y: ship.y,
-        width: 20.0,
-        height: 75.0,
-    });
-    walls.push(Rectangle {
-        x: ship.x + ship.width,
-        y: ship.y + ship.height - 75.0,
-        width: 20.0,
-        height: 75.0,
-    });
+    let mut walls = create_ship(ship);
+
     let left = Vector2 { x: -1.0, y: 0.0 };
     let right = Vector2 { x: 1.0, y: 0.0 };
     let up = Vector2 { x: 0.0, y: -1.0 };
@@ -141,12 +120,31 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
     let ship_mass = particles_alive as f32 * 0.8;
     let mut ship_vel = Vector2 { x: 0.0, y: 0.0 };
 
+    let mut cells: Vec<Cell> = Vec::with_capacity(32);
+    let width = SCREEN_WIDTH as f32 / 8.0;
+    let height = SCREEN_HEIGHT as f32 / 8.0;
+
+    for i in 0..128 {
+        cells.push(Cell {
+            particles: Vec::with_capacity(PARTICLE_LIMIT),
+            rect: Rectangle {
+                x: (i % 8) as f32 * width,
+                y: (i / 8) as f32 * height,
+                width,
+                height,
+            },
+        });
+    }
+
+    let mut elapsed: u64 = 0;
     loop {
         let now = Instant::now();
 
         let mut data = Data {
             total_vector_vel: Vector2 { x: 0.0, y: 0.0 },
             total_scalar_vel: 0.0,
+            elapsed_time: elapsed,
+            collision_time: 0,
         };
         let mut ship_impulse = Vector2 { x: 0.0, y: 0.0 };
 
@@ -162,8 +160,8 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
                 part.pos.x = SCREEN_WIDTH as f32 - part.radius;
                 part.vel.x = -part.vel.x;
             } else if part.pos.x - part.radius < 0.0 {
-                // part.pos.x = part.radius;
-                // part.vel.x = -part.vel.x;
+                part.pos.x = part.radius;
+                part.vel.x = -part.vel.x;
             }
             if part.pos.y + part.radius > SCREEN_HEIGHT as f32 {
                 part.pos.y = SCREEN_HEIGHT as f32 - part.radius;
@@ -224,15 +222,38 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
             wall.y += ship_vel.y * dt;
         }
 
-        // TODO: make a new collision detection system
-        // with separate broad-phase and narrow-phase for optimization
-        for i in 0..particles_alive {
-            // We split here so we never iterate over the same two particles twice
-            let (left, right) = particles[..particles_alive].split_at_mut(i + 1);
-            let a = &mut left[i];
-
-            right.iter_mut().for_each(|b| Particle::collide(a, b));
+        // Building cells
+        for cell in cells.iter_mut() {
+            cell.particles.clear();
         }
+        for i in 0..particles_alive {
+            let p = &particles[i];
+
+            for cell in cells.iter_mut() {
+                if cell.rect.check_collision_circle_rec(p.pos, p.radius) {
+                    cell.particles.push(i);
+                }
+            }
+        }
+
+        // Handling all collisions between particles
+        let collide_start = Instant::now();
+        for cell in cells.iter() {
+            let indices = &cell.particles;
+
+            for a_idx in 0..indices.len() {
+                for b_idx in (a_idx + 1)..indices.len() {
+                    let i = indices[a_idx];
+                    let j = indices[b_idx];
+
+                    let (left, right) = particles.split_at_mut(j);
+                    let (pa, pb) = { (&mut left[i], &mut right[0]) };
+
+                    Particle::collide(pa, pb);
+                }
+            }
+        }
+        data.collision_time = collide_start.elapsed().as_millis() as u64;
 
         let particle_snap: Vec<RenderParticle> = particles[0..particles_alive]
             .iter()
@@ -249,11 +270,15 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
         };
         tx.send((snapshot, data)).unwrap();
 
-        let elapsed = now.elapsed().as_millis();
-        println!("elapsed: {}", elapsed);
+        elapsed = now.elapsed().as_millis() as u64;
         let sleep_time = i64::max(20 - elapsed as i64, 0);
         thread::sleep(Duration::from_millis(sleep_time as u64));
     }
+}
+
+struct Cell {
+    particles: Vec<usize>,
+    rect: Rectangle,
 }
 
 struct Snapshot {
@@ -264,6 +289,8 @@ struct Snapshot {
 struct Data {
     total_vector_vel: Vector2,
     total_scalar_vel: f32,
+    elapsed_time: u64,
+    collision_time: u64,
 }
 
 fn render_particle(d: &mut RaylibDrawHandle, particle: &RenderParticle) -> () {
@@ -296,4 +323,40 @@ fn particle_check_wall(part: &Particle, wall: &Rectangle) -> Vector2 {
     } else {
         return up;
     }
+}
+
+fn create_ship(ship: Rectangle) -> Vec<Rectangle> {
+    let mut walls = Vec::with_capacity(5);
+    walls.push(Rectangle {
+        x: ship.x - 20.0,
+        y: ship.y,
+        width: 20.0,
+        height: ship.height,
+    });
+    walls.push(Rectangle {
+        x: ship.x,
+        y: ship.y - 20.0,
+        width: ship.width,
+        height: 20.0,
+    });
+    walls.push(Rectangle {
+        x: ship.x,
+        y: ship.y + ship.height,
+        width: ship.width,
+        height: 20.0,
+    });
+    walls.push(Rectangle {
+        x: ship.x + ship.width,
+        y: ship.y,
+        width: 20.0,
+        height: 75.0,
+    });
+    walls.push(Rectangle {
+        x: ship.x + ship.width,
+        y: ship.y + ship.height - 75.0,
+        width: 20.0,
+        height: 75.0,
+    });
+
+    walls
 }
