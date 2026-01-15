@@ -1,4 +1,5 @@
 use rand::prelude::*;
+use raylib::ffi::DrawCircleSector;
 use raylib::prelude::*;
 mod physics;
 use physics::Particle;
@@ -34,6 +35,10 @@ fn main() {
 
         d.clear_background(Color::BLACK);
 
+        let circ_pos = snap.plane;
+        d.draw_circle_sector(circ_pos, 240.0, 300.0, 240.0, 20, Color::WHITE);
+        d.draw_circle_sector(circ_pos, 210.0, 300.0, 240.0, 20, Color::BLACK);
+
         // Render every particle
         for particle in snap.particles.iter() {
             render_particle(&mut d, particle);
@@ -67,58 +72,65 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
 
     // Creating empty particle array
     let mut particles = Vec::with_capacity(PARTICLE_LIMIT);
-    for _i in 0..PARTICLE_LIMIT {
-        particles.push(Particle::new(Vector2 { x: 0.0, y: 0.0 }));
-    }
-
-    //let _ = new_particle(&mut particles, Vector2 { x: 100.0, y: 100.0 }).unwrap();
+    // for _i in 0..PARTICLE_LIMIT {
+    // particles.push(Particle::new(Vector2 { x: 0.0, y: 0.0 }));
+    // }
 
     let mut rng = rand::rng();
     let mut particles_alive: usize = 0;
     // This code is kinda sloppy but whatevs
 
-    let screen_half = Vector2 {
-        x: SCREEN_WIDTH as f32 / 2.0 + 400.0,
-        y: SCREEN_HEIGHT as f32 / 2.0,
-    };
-    for _i in 0..4000 {
-        // particles[particles_alive] = Particle::new(Vector2 {
-        //     x: rng.random_range(screen_half.x - 120.0..screen_half.x + 120.0),
-        //     y: rng.random_range(screen_half.y - 100.0..screen_half.y + 100.0),
-        // });
-        particles[particles_alive] = Particle::new(Vector2 {
-            x: rng.random_range(10.0..SCREEN_WIDTH as f32 - 10.0),
-            y: rng.random_range(screen_half.y - 100.0..screen_half.y + 100.0),
-        });
-        // Give new particles a starting velocity in a random direction
-        let rand_dir = Vector2 {
-            x: rng.random_range(-1.0..1.0),
-            y: rng.random_range(-1.0..1.0),
-        }
-        .normalized();
+    // let screen_half = Vector2 {
+    // x: SCREEN_WIDTH as f32 / 2.0 + 400.0,
+    // y: SCREEN_HEIGHT as f32 / 2.0,
+    // };
+    // for _i in 0..1000 {
+    // particles[particles_alive] = Particle::new(Vector2 {
+    //     x: rng.random_range(screen_half.x - 120.0..screen_half.x + 120.0),
+    //     y: rng.random_range(screen_half.y - 100.0..screen_half.y + 100.0),
+    // });
+    // particles[particles_alive] = Particle::new(Vector2 {
+    // x: rng.random_range(10.0..SCREEN_WIDTH as f32 - 10.0),
+    // y: rng.random_range(10.0..SCREEN_HEIGHT as f32 - 10.0),
+    // });
+    // Give new particles a starting velocity in a random direction
+    // let rand_dir = Vector2 {
+    // x: rng.random_range(-1.0..1.0),
+    // y: rng.random_range(-1.0..1.0),
+    // }
+    // .normalized();
 
-        particles[particles_alive].vel = Vector2 {
-            x: rand_dir.x * 200.0,
-            y: rand_dir.y * 170.0,
-        };
-        particles_alive += 1;
-    }
+    // particles[particles_alive].vel = Vector2 {
+    // x: rand_dir.x * 200.0,
+    // y: rand_dir.y * 170.0,
+    // x: 100.0,
+    // y: rand_dir.y * 1.0,
+    // };
+    // particles_alive += 1;
+    // }
 
-    let ship = Rectangle {
-        x: screen_half.x - 120.0,
-        y: screen_half.y - 90.0,
-        width: 260.0,
-        height: 180.0,
-    };
-    let mut walls = create_ship(ship);
+    // particles.push(Particle::new(Vector2 {
+    //     x: SCREEN_WIDTH as f32 * 0.5,
+    //     y: SCREEN_HEIGHT as f32 * 0.5,
+    // }));
+    // particles[particles_alive].radius = 80.0;
+    // particles_alive += 1;
 
-    let left = Vector2 { x: -1.0, y: 0.0 };
-    let right = Vector2 { x: 1.0, y: 0.0 };
-    let up = Vector2 { x: 0.0, y: -1.0 };
-    let down = Vector2 { x: 0.0, y: 1.0 };
+    // let ship = Rectangle {
+    //     x: screen_half.x - 120.0,
+    //     y: screen_half.y - 90.0,
+    //     width: 260.0,
+    //     height: 180.0,
+    // };
+    // let mut walls = create_ship(ship);
+    let walls: Vec<Rectangle> = Vec::with_capacity(0);
 
     let ship_mass = particles_alive as f32 * 0.8;
     let mut ship_vel = Vector2 { x: 0.0, y: 0.0 };
+    let mut plane_pos = Vector2 {
+        x: SCREEN_WIDTH as f32 * 0.5,
+        y: SCREEN_HEIGHT as f32 * 0.5,
+    };
 
     let mut cells: Vec<Cell> = Vec::with_capacity(32);
     let width = SCREEN_WIDTH as f32 / 8.0;
@@ -135,6 +147,7 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
             },
         });
     }
+    let mut oldest_particle = 0;
 
     let mut elapsed: u64 = 0;
     loop {
@@ -148,6 +161,36 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
         };
         let mut ship_impulse = Vector2 { x: 0.0, y: 0.0 };
 
+        // Create new particle
+
+        particles.push(Particle::new(Vector2 { x: 0.0, y: 0.0 }));
+        particles[particles_alive] = Particle::new(Vector2 {
+            x: -10.0,
+            y: rng.random_range(10.0..SCREEN_HEIGHT as f32 - 10.0),
+        });
+        // Give new particles a starting velocity in a random direction
+        let rand_dir = Vector2 {
+            x: rng.random_range(-1.0..1.0),
+            y: rng.random_range(-1.0..1.0),
+        }
+        .normalized();
+
+        particles[particles_alive].vel = Vector2 {
+            // x: rand_dir.x * 200.0,
+            // y: rand_dir.y * 170.0,
+            x: 100.0,
+            y: rand_dir.y * 10.0,
+        };
+        particles_alive += 1;
+        if particles_alive > 800 {
+            particles.swap_remove(oldest_particle);
+            oldest_particle += 1;
+            if oldest_particle >= particles_alive {
+                oldest_particle = 0;
+            }
+            particles_alive -= 1;
+        }
+
         // Update every particle
         for part in particles[0..particles_alive].iter_mut() {
             //part.force.y += GRAVITY * part.mass;
@@ -157,70 +200,65 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
         // Boundaries
         for part in particles[0..particles_alive].iter_mut() {
             if part.pos.x + part.radius > SCREEN_WIDTH as f32 {
-                part.pos.x = SCREEN_WIDTH as f32 - part.radius;
-                part.vel.x = -part.vel.x;
+                // part.pos.x = SCREEN_WIDTH as f32 - part.radius;
+                // part.vel.x = -part.vel.x;
             } else if part.pos.x - part.radius < 0.0 {
-                part.pos.x = part.radius;
-                part.vel.x = -part.vel.x;
+                // part.pos.x = part.radius;
+                // part.vel.x = -part.vel.x;
             }
             if part.pos.y + part.radius > SCREEN_HEIGHT as f32 {
                 part.pos.y = SCREEN_HEIGHT as f32 - part.radius;
                 part.vel.y = -part.vel.y;
             } else if part.pos.y - part.radius < 0.0 {
-                part.pos.y = part.radius;
-                part.vel.y = -part.vel.y;
+                // part.pos.y = part.radius;
+                // part.vel.y = -part.vel.y;
             }
         }
 
-        let zero = Vector2 { x: 0.0, y: 0.0 };
         for part in particles[0..particles_alive].iter_mut() {
-            for wall in walls.iter() {
-                let m1 = ship_mass;
-                let m2 = part.mass;
+            // particle_collide_wall(part, &mut walls, ship_mass, ship_vel, &mut ship_impulse);
 
-                let norm = particle_check_wall(part, wall);
-                if norm == zero {
-                    continue;
-                }
-
-                let v1 = ship_vel.x;
-                let v2 = part.vel.x;
-                if norm == right || norm == left {
-                    let vcm = (v1 * m1 + v2 * m2) / (m1 + m2);
-                    ship_impulse.x += (2.0 * vcm - v1) - ship_vel.x;
-                    part.vel.x = 2.0 * vcm - v2;
-
-                    if norm == right {
-                        part.pos.x = wall.x + wall.width + part.radius;
-                    } else if norm == left {
-                        part.pos.x = wall.x - part.radius;
-                    }
-                }
-
-                let v1 = ship_vel.y;
-                let v2 = part.vel.y;
-                if norm == down || norm == up {
-                    let vcm = (v1 * m1 + v2 * m2) / (m1 + m2);
-                    ship_impulse.y += (2.0 * vcm - v1) - ship_vel.y;
-                    part.vel.y = 2.0 * vcm - v2;
-
-                    if norm == down {
-                        part.pos.y = wall.y + wall.height + part.radius;
-                    } else if norm == up {
-                        part.pos.y = wall.y - part.radius;
-                    }
-                }
+            // Collision with plane
+            if !check_collision_circles(part.pos, part.radius, plane_pos, 240.0) {
+                continue;
             }
 
-            data.total_vector_vel += part.vel;
-            data.total_scalar_vel += part.vel.length();
+            let am = part.mass;
+            let bm = ship_mass;
+            let av = part.vel;
+            let bv = ship_vel;
+            let vcm = (av * am + bv * bm) / (am + bm);
+
+            let delta = plane_pos - part.pos;
+            let dist = delta.length();
+
+            // Check if there's any collision in the first place
+            let norm = delta / dist;
+
+            // Part of the velocity along normal
+            let avn = norm * av.dot(norm);
+            let bvn = norm * bv.dot(norm);
+
+            // Part of the velocity that lies
+            // perpendicular to the collision normal
+            let avt = av - avn;
+            let bvt = bv - bvn;
+
+            // Get vel' by swapping vel along normal
+            let avelnew = avt + bvn;
+            let bvelnew = bvt + avn;
+
+            // We did it!
+            part.vel = avelnew;
+            ship_vel = bvelnew;
         }
 
         ship_vel += ship_impulse;
-        for wall in walls.iter_mut() {
-            wall.x += ship_vel.x * dt;
-            wall.y += ship_vel.y * dt;
-        }
+        // for wall in walls.iter_mut() {
+        // wall.x += ship_vel.x * dt;
+        // wall.y += ship_vel.y * dt;
+        // }
+        plane_pos += ship_vel * dt;
 
         // Building cells
         for cell in cells.iter_mut() {
@@ -234,6 +272,11 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
                     cell.particles.push(i);
                 }
             }
+        }
+
+        for part in particles[0..particles_alive].iter_mut() {
+            data.total_vector_vel += part.vel;
+            data.total_scalar_vel += part.vel.length();
         }
 
         // Handling all collisions between particles
@@ -267,6 +310,7 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
         let snapshot = Snapshot {
             particles: particle_snap,
             walls: wall_snap,
+            plane: plane_pos,
         };
         tx.send((snapshot, data)).unwrap();
 
@@ -284,6 +328,7 @@ struct Cell {
 struct Snapshot {
     particles: Vec<RenderParticle>,
     walls: Vec<Rectangle>,
+    plane: Vector2,
 }
 
 struct Data {
@@ -359,4 +404,56 @@ fn create_ship(ship: Rectangle) -> Vec<Rectangle> {
     });
 
     walls
+}
+
+fn particle_collide_wall(
+    part: &mut Particle,
+    walls: &mut Vec<Rectangle>,
+    ship_mass: f32,
+    ship_vel: Vector2,
+    ship_impulse: &mut Vector2,
+) {
+    let left = Vector2 { x: -1.0, y: 0.0 };
+    let right = Vector2 { x: 1.0, y: 0.0 };
+    let up = Vector2 { x: 0.0, y: -1.0 };
+    let down = Vector2 { x: 0.0, y: 1.0 };
+
+    let zero = Vector2 { x: 0.0, y: 0.0 };
+    for wall in walls.iter() {
+        let m1 = ship_mass;
+        let m2 = part.mass;
+
+        let norm = particle_check_wall(part, wall);
+        if norm == zero {
+            continue;
+        }
+
+        let v1 = ship_vel.x;
+        let v2 = part.vel.x;
+        if norm == right || norm == left {
+            let vcm = (v1 * m1 + v2 * m2) / (m1 + m2);
+            ship_impulse.x += (2.0 * vcm - v1) - ship_vel.x;
+            part.vel.x = 2.0 * vcm - v2;
+
+            if norm == right {
+                part.pos.x = wall.x + wall.width + part.radius;
+            } else if norm == left {
+                part.pos.x = wall.x - part.radius;
+            }
+        }
+
+        let v1 = ship_vel.y;
+        let v2 = part.vel.y;
+        if norm == down || norm == up {
+            let vcm = (v1 * m1 + v2 * m2) / (m1 + m2);
+            ship_impulse.y += (2.0 * vcm - v1) - ship_vel.y;
+            part.vel.y = 2.0 * vcm - v2;
+
+            if norm == down {
+                part.pos.y = wall.y + wall.height + part.radius;
+            } else if norm == up {
+                part.pos.y = wall.y - part.radius;
+            }
+        }
+    }
 }
