@@ -1,8 +1,6 @@
 use rand::prelude::*;
-use raylib::ffi::DrawCircleSector;
 use raylib::prelude::*;
 mod physics;
-use physics::Particle;
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -36,8 +34,20 @@ fn main() {
         d.clear_background(Color::BLACK);
 
         let circ_pos = snap.plane;
+        // I really wish this function could operate in radians
         d.draw_circle_sector(circ_pos, 240.0, 300.0, 240.0, 20, Color::WHITE);
         d.draw_circle_sector(circ_pos, 210.0, 300.0, 240.0, 20, Color::BLACK);
+
+        d.draw_circle_lines_v(circ_pos, 240, COLOR::PURPLE);
+        d.draw_circle_lines_v(circ_pos, 210, COLOR::PURPLE);
+        let tri_start = Vector2 {
+            x: -207.85 + circ_pos.x,
+            y: 240.0 + circ_pos.y,
+        };
+        let tri_end = Vector2 {
+            x: 207.85 + circ_pos.x,
+            y: 240.0 + circ_pos.y,
+        };
 
         // Render every particle
         for particle in snap.particles.iter() {
@@ -125,7 +135,8 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
     // let mut walls = create_ship(ship);
     let walls: Vec<Rectangle> = Vec::with_capacity(0);
 
-    let ship_mass = particles_alive as f32 * 0.8;
+    // let ship_mass = particles_alive as f32 * 0.8;
+    let ship_mass = 400.0;
     let mut ship_vel = Vector2 { x: 0.0, y: 0.0 };
     let mut plane_pos = Vector2 {
         x: SCREEN_WIDTH as f32 * 0.5,
@@ -218,16 +229,28 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
         for part in particles[0..particles_alive].iter_mut() {
             // particle_collide_wall(part, &mut walls, ship_mass, ship_vel, &mut ship_impulse);
 
-            // Collision with plane
+            // Collision with plane circle
             if !check_collision_circles(part.pos, part.radius, plane_pos, 240.0) {
                 continue;
             }
+
+            // Narrow to collision with plane circle sector
+            let tri_start = Vector2 {
+                x: -207.85 + plane_pos.x,
+                y: 240.0 + plane_pos.y,
+            };
+            let tri_end = Vector2 {
+                x: 207.85 + plane_pos.x,
+                y: 240.0 + plane_pos.y,
+            };
 
             let am = part.mass;
             let bm = ship_mass;
             let av = part.vel;
             let bv = ship_vel;
             let vcm = (av * am + bv * bm) / (am + bm);
+            let avp = av - vcm;
+            let bvp = bv - vcm;
 
             let delta = plane_pos - part.pos;
             let dist = delta.length();
@@ -236,21 +259,21 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
             let norm = delta / dist;
 
             // Part of the velocity along normal
-            let avn = norm * av.dot(norm);
-            let bvn = norm * bv.dot(norm);
+            let avn = norm * avp.dot(norm);
+            let bvn = norm * bvp.dot(norm);
 
             // Part of the velocity that lies
             // perpendicular to the collision normal
-            let avt = av - avn;
-            let bvt = bv - bvn;
+            let avt = avp - avn;
+            let bvt = bvp - bvn;
 
             // Get vel' by swapping vel along normal
-            let avelnew = avt + bvn;
-            let bvelnew = bvt + avn;
+            let avelnew = -avt - avn;
+            let bvelnew = -bvt - bvn;
 
             // We did it!
-            part.vel = avelnew;
-            ship_vel = bvelnew;
+            part.vel = avelnew + vcm;
+            ship_vel = bvelnew + vcm;
         }
 
         ship_vel += ship_impulse;
