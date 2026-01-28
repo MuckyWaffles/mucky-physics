@@ -1,6 +1,8 @@
 use rand::prelude::*;
+use raylib::ffi::{CheckCollisionBoxes, CheckCollisionPointPoly};
 use raylib::prelude::*;
 mod physics;
+use physics::*;
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -10,7 +12,8 @@ const SCREEN_HEIGHT: i32 = 800;
 
 const PARTICLE_LIMIT: usize = 10000;
 
-const GRAVITY: f32 = 10.0;
+// const GRAVITY: f32 = 10.0;
+const GRAVITY: f32 = 1.0;
 
 fn main() {
     // You know what I really like Rust syntax
@@ -38,16 +41,20 @@ fn main() {
         d.draw_circle_sector(circ_pos, 240.0, 300.0, 240.0, 20, Color::WHITE);
         d.draw_circle_sector(circ_pos, 210.0, 300.0, 240.0, 20, Color::BLACK);
 
-        d.draw_circle_lines_v(circ_pos, 240, COLOR::PURPLE);
-        d.draw_circle_lines_v(circ_pos, 210, COLOR::PURPLE);
+        d.draw_circle_lines_v(circ_pos, 240.0, Color::PURPLE);
+        d.draw_circle_lines_v(circ_pos, 210.0, Color::PURPLE);
+        let tri_x = 240.0 * f32::sin(PI as f32 * 0.194);
         let tri_start = Vector2 {
-            x: -207.85 + circ_pos.x,
-            y: 240.0 + circ_pos.y,
+            x: -tri_x + circ_pos.x,
+            y: -240.0 + circ_pos.y,
         };
         let tri_end = Vector2 {
-            x: 207.85 + circ_pos.x,
-            y: 240.0 + circ_pos.y,
+            x: tri_x + circ_pos.x,
+            y: -240.0 + circ_pos.y,
         };
+        d.draw_line_v(circ_pos, tri_start, Color::PURPLE);
+        d.draw_line_v(circ_pos, tri_end, Color::PURPLE);
+        d.draw_line_v(tri_start, tri_end, Color::PURPLE);
 
         // Render every particle
         for particle in snap.particles.iter() {
@@ -136,7 +143,7 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
     let walls: Vec<Rectangle> = Vec::with_capacity(0);
 
     // let ship_mass = particles_alive as f32 * 0.8;
-    let ship_mass = 400.0;
+    let ship_mass = 40.0;
     let mut ship_vel = Vector2 { x: 0.0, y: 0.0 };
     let mut plane_pos = Vector2 {
         x: SCREEN_WIDTH as f32 * 0.5,
@@ -192,6 +199,8 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
             x: 100.0,
             y: rand_dir.y * 10.0,
         };
+        particles[particles_alive].mass = 0.1;
+
         particles_alive += 1;
         if particles_alive > 800 {
             particles.swap_remove(oldest_particle);
@@ -229,20 +238,11 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
         for part in particles[0..particles_alive].iter_mut() {
             // particle_collide_wall(part, &mut walls, ship_mass, ship_vel, &mut ship_impulse);
 
-            // Collision with plane circle
-            if !check_collision_circles(part.pos, part.radius, plane_pos, 240.0) {
+            let zero = Vector2 { x: 0.0, y: 0.0 };
+            let norm = particle_plane_normal(part, plane_pos);
+            if norm == zero {
                 continue;
             }
-
-            // Narrow to collision with plane circle sector
-            let tri_start = Vector2 {
-                x: -207.85 + plane_pos.x,
-                y: 240.0 + plane_pos.y,
-            };
-            let tri_end = Vector2 {
-                x: 207.85 + plane_pos.x,
-                y: 240.0 + plane_pos.y,
-            };
 
             let am = part.mass;
             let bm = ship_mass;
@@ -251,12 +251,6 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
             let vcm = (av * am + bv * bm) / (am + bm);
             let avp = av - vcm;
             let bvp = bv - vcm;
-
-            let delta = plane_pos - part.pos;
-            let dist = delta.length();
-
-            // Check if there's any collision in the first place
-            let norm = delta / dist;
 
             // Part of the velocity along normal
             let avn = norm * avp.dot(norm);
@@ -268,20 +262,25 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
             let bvt = bvp - bvn;
 
             // Get vel' by swapping vel along normal
-            let avelnew = -avt - avn;
-            let bvelnew = -bvt - bvn;
+            let avelnew = avt - avn;
+            let bvelnew = bvt - bvn;
 
             // We did it!
             part.vel = avelnew + vcm;
             ship_vel = bvelnew + vcm;
         }
 
+        //ship_impulse.y += GRAVITY;
         ship_vel += ship_impulse;
         // for wall in walls.iter_mut() {
         // wall.x += ship_vel.x * dt;
         // wall.y += ship_vel.y * dt;
         // }
         plane_pos += ship_vel * dt;
+
+        if plane_pos.y - 190.0 > SCREEN_HEIGHT as f32 {
+            plane_pos.y = SCREEN_HEIGHT as f32 + 190.0;
+        }
 
         // Building cells
         for cell in cells.iter_mut() {
@@ -427,6 +426,30 @@ fn create_ship(ship: Rectangle) -> Vec<Rectangle> {
     });
 
     walls
+}
+
+fn particle_plane_normal(part: &Particle, plane_pos: Vector2) -> Vector2 {
+    let delta = plane_pos - part.pos;
+    let dist = delta.length();
+    let plane_radius = 240.0;
+
+    if (dist > plan_radius + part.radius) {
+        return Vector2 { x: 0.0, y: 0.0 };
+    }
+
+    let norm = delta / dist;
+
+    let tri_x = 240.0 * f32::sin(PI as f32 * 0.194);
+    let tri_start = Vector2 {
+        x: -tri_x + plane_pos.x,
+        y: 240.0 + plane_pos.y,
+    };
+    let tri_end = Vector2 {
+        x: tri_x + plane_pos.x,
+        y: 240.0 + plane_pos.y,
+    };
+
+    return norm;
 }
 
 fn particle_collide_wall(
