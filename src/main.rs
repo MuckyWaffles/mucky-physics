@@ -1,5 +1,5 @@
 use rand::prelude::*;
-use raylib::ffi::{CheckCollisionBoxes, CheckCollisionPointPoly};
+use raylib::ffi::{CheckCollisionBoxes, CheckCollisionCircleLine, CheckCollisionPointPoly};
 use raylib::prelude::*;
 mod physics;
 use physics::*;
@@ -433,11 +433,11 @@ fn particle_plane_normal(part: &Particle, plane_pos: Vector2) -> Vector2 {
     let dist = delta.length();
     let plane_radius = 240.0;
 
-    if (dist > plan_radius + part.radius) {
+    if (dist > plane_radius + part.radius) {
         return Vector2 { x: 0.0, y: 0.0 };
     }
 
-    let norm = delta / dist;
+    let mut norm = delta / dist;
 
     let tri_x = 240.0 * f32::sin(PI as f32 * 0.194);
     let tri_start = Vector2 {
@@ -448,6 +448,38 @@ fn particle_plane_normal(part: &Particle, plane_pos: Vector2) -> Vector2 {
         x: tri_x + plane_pos.x,
         y: 240.0 + plane_pos.y,
     };
+
+    let part_pos = part.pos - plane_pos;
+    let angle = f32::atan2(part_pos.x, part_pos.y);
+
+    if angle > 2.0 * PI as f32 / 3.0 {
+        Vector2 { x: 0.0, y: 0.0 };
+    } else if angle < PI as f32 / 3.0 {
+        Vector2 { x: 0.0, y: 0.0 };
+    }
+
+    unsafe {
+        if CheckCollisionCircleLine(
+            ffi::Vector2 {
+                x: part.pos.x,
+                y: part.pos.y,
+            },
+            part.radius,
+            ffi::Vector2 {
+                x: plane_pos.x,
+                y: plane_pos.y,
+            },
+            ffi::Vector2 {
+                x: tri_start.x,
+                y: tri_start.y,
+            },
+        ) {
+            norm = Vector2 {
+                x: f32::sin(PI as f32 * 0.194 + PI as f32 / 2.0),
+                y: f32::cos(PI as f32 * 0.194 + PI as f32 / 2.0),
+            };
+        }
+    }
 
     return norm;
 }
