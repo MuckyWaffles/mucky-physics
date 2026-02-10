@@ -1,5 +1,5 @@
 use rand::prelude::*;
-use raylib::ffi::{CheckCollisionBoxes, CheckCollisionCircleLine, CheckCollisionPointPoly};
+use raylib::ffi::CheckCollisionCircleLine;
 use raylib::prelude::*;
 mod physics;
 use physics::*;
@@ -244,30 +244,7 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
                 continue;
             }
 
-            let am = part.mass;
-            let bm = ship_mass;
-            let av = part.vel;
-            let bv = ship_vel;
-            let vcm = (av * am + bv * bm) / (am + bm);
-            let avp = av - vcm;
-            let bvp = bv - vcm;
-
-            // Part of the velocity along normal
-            let avn = norm * avp.dot(norm);
-            let bvn = norm * bvp.dot(norm);
-
-            // Part of the velocity that lies
-            // perpendicular to the collision normal
-            let avt = avp - avn;
-            let bvt = bvp - bvn;
-
-            // Get vel' by swapping vel along normal
-            let avelnew = avt - avn;
-            let bvelnew = bvt - bvn;
-
-            // We did it!
-            part.vel = avelnew + vcm;
-            ship_vel = bvelnew + vcm;
+            physics::collide_with_mass(norm, &mut part.vel, part.mass, &mut ship_vel, ship_mass);
         }
 
         //ship_impulse.y += GRAVITY;

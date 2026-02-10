@@ -72,3 +72,28 @@ impl Particle {
         }
     }
 }
+
+// I'm probably going to rename this function to just "collide" at some point
+pub fn collide_with_mass(norm: Vector2, av: &mut Vector2, am: f32, bv: &mut Vector2, bm: f32) {
+    let vcm = (*av * am + *bv * bm) / (am + bm);
+
+    let avp = *av - vcm;
+    let bvp = *bv - vcm;
+
+    // Part of the velocity along normal
+    let avn = norm * avp.dot(norm);
+    let bvn = norm * bvp.dot(norm);
+
+    // Part of the velocity that lies
+    // perpendicular to the collision normal
+    let avt = avp - avn;
+    let bvt = bvp - bvn;
+
+    // Get vel' by swapping vel along normal
+    let avelnew = avt - avn;
+    let bvelnew = bvt - bvn;
+
+    // We did it!
+    *av = avelnew + vcm;
+    *bv = bvelnew + vcm;
+}
