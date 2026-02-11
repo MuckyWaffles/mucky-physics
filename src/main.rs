@@ -392,12 +392,28 @@ fn particle_plane_normal(part: &Particle, plane_pos: Vector2) -> Vector2 {
     let start = f32::atan2(-tri_x, tri_y) - PI as f32;
     let end = f32::atan2(tri_x, tri_y) - PI as f32;
 
+    let side_norm = Vector2 {
+        x: f32::sin(start - PI as f32 / 2.0),
+        y: f32::cos(start - PI as f32 / 2.0),
+    };
+
     if angle > start && angle < end {
-        if f32::abs(angle - start) < 5.0 {
-            norm = Vector2 { x: -0.6, y: 0.3 };
-        } else if f32::abs(angle - end) < 5.0 {
-            norm = Vector2 { x: 0.6, y: 0.3 };
+        if (240.0 + part.radius) - dist < 2.0 {
+            return norm;
         }
+
+        if f32::abs(angle - start) < 5.0 {
+            norm = Vector2 {
+                x: -side_norm.x,
+                y: side_norm.y,
+            };
+        } else if f32::abs(angle - end) < 5.0 {
+            norm = Vector2 {
+                x: side_norm.x,
+                y: side_norm.y,
+            };
+        }
+        println!("x{}, y{}", norm.x, norm.y);
     } else {
         norm = Vector2 { x: 0.0, y: 0.0 };
     }
