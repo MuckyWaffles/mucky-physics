@@ -37,29 +37,40 @@ fn main() {
 
         d.clear_background(Color::BLACK);
 
-        let circ_pos = snap.plane;
+        let plane_pos = snap.plane;
         // I really wish this function could operate in radians
-        d.draw_circle_sector(circ_pos, 240.0, 300.0, 240.0, 20, Color::WHITE);
-        d.draw_circle_sector(circ_pos, 210.0, 300.0, 240.0, 20, Color::BLACK);
+        d.draw_circle_sector(plane_pos, 240.0, 300.0, 240.0, 20, Color::WHITE);
+        d.draw_circle_sector(plane_pos, 210.0, 300.0, 240.0, 20, Color::BLACK);
 
-        d.draw_circle_lines_v(circ_pos, 240.0, Color::PURPLE);
-        d.draw_circle_lines_v(circ_pos, 210.0, Color::PURPLE);
+        d.draw_circle_lines_v(plane_pos, 240.0, Color::PURPLE);
+        d.draw_circle_lines_v(plane_pos, 210.0, Color::PURPLE);
         let tri_x = 240.0 * f32::sin(PI as f32 * 0.194);
         let tri_start = Vector2 {
-            x: -tri_x + circ_pos.x,
-            y: -240.0 + circ_pos.y,
+            x: -tri_x + plane_pos.x,
+            y: -240.0 + plane_pos.y,
         };
         let tri_end = Vector2 {
-            x: tri_x + circ_pos.x,
-            y: -240.0 + circ_pos.y,
+            x: tri_x + plane_pos.x,
+            y: -240.0 + plane_pos.y,
         };
-        d.draw_line_v(circ_pos, tri_start, Color::PURPLE);
-        d.draw_line_v(circ_pos, tri_end, Color::PURPLE);
+        d.draw_line_v(plane_pos, tri_start, Color::PURPLE);
+        d.draw_line_v(plane_pos, tri_end, Color::PURPLE);
         d.draw_line_v(tri_start, tri_end, Color::PURPLE);
 
         // Render every particle
         for particle in snap.particles.iter() {
             render_particle(&mut d, particle);
+
+            let part_pos = particle.pos - plane_pos;
+            let angle = f32::atan2(part_pos.x, part_pos.y);
+
+            let start = f32::atan2(tri_start.x - plane_pos.x, tri_start.y - plane_pos.y);
+            let end = f32::atan2(tri_end.x - plane_pos.x, tri_end.y - plane_pos.y);
+
+            if angle > start && angle < end {
+            } else {
+                d.draw_line_v(particle.pos, plane_pos, Color::PURPLE);
+            }
         }
         for wall in snap.walls.iter() {
             d.draw_rectangle_rec(wall, Color::WHITE);
@@ -129,7 +140,7 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
             elapsed_time: elapsed,
             collision_time: 0,
         };
-        let mut ship_impulse = Vector2 { x: 0.0, y: 0.0 };
+        let mut ship_impulse = Vector2 { x: -0.1, y: 0.0 };
 
         // Create new particles
         particles.push(Particle::new(Vector2 { x: 0.0, y: 0.0 }));
@@ -165,6 +176,7 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
         // Boundaries
         for (i, part) in particles[0..particles_alive].iter_mut().enumerate() {
             if part.pos.x + part.radius > SCREEN_WIDTH as f32 * 2.0 {
+                remove_queue.push(i);
             } else if part.pos.x - part.radius < -SCREEN_WIDTH as f32 {
                 remove_queue.push(i);
             }
@@ -364,45 +376,30 @@ fn particle_plane_normal(part: &Particle, plane_pos: Vector2) -> Vector2 {
     let mut norm = delta / dist;
 
     let tri_x = 240.0 * f32::sin(PI as f32 * 0.194);
+    let tri_y = 240.0 * f32::cos(PI as f32 * 0.194);
     let tri_start = Vector2 {
         x: -tri_x + plane_pos.x,
-        y: 240.0 + plane_pos.y,
+        y: tri_y + plane_pos.y,
     };
     let tri_end = Vector2 {
         x: tri_x + plane_pos.x,
-        y: 240.0 + plane_pos.y,
+        y: tri_y + plane_pos.y,
     };
 
     let part_pos = part.pos - plane_pos;
     let angle = f32::atan2(part_pos.x, part_pos.y);
 
-    if angle > 2.0 * PI as f32 / 3.0 {
-        Vector2 { x: 0.0, y: 0.0 };
-    } else if angle < PI as f32 / 3.0 {
-        Vector2 { x: 0.0, y: 0.0 };
-    }
+    let start = f32::atan2(-tri_x, tri_y) - PI as f32;
+    let end = f32::atan2(tri_x, tri_y) - PI as f32;
 
-    unsafe {
-        if CheckCollisionCircleLine(
-            ffi::Vector2 {
-                x: part.pos.x,
-                y: part.pos.y,
-            },
-            part.radius,
-            ffi::Vector2 {
-                x: plane_pos.x,
-                y: plane_pos.y,
-            },
-            ffi::Vector2 {
-                x: tri_start.x,
-                y: tri_start.y,
-            },
-        ) {
-            norm = Vector2 {
-                x: f32::sin(PI as f32 * 0.194 + PI as f32 / 2.0),
-                y: f32::cos(PI as f32 * 0.194 + PI as f32 / 2.0),
-            };
+    if angle > start && angle < end {
+        if f32::abs(angle - start) < 5.0 {
+            norm = Vector2 { x: -0.6, y: 0.3 };
+        } else if f32::abs(angle - end) < 5.0 {
+            norm = Vector2 { x: 0.6, y: 0.3 };
         }
+    } else {
+        norm = Vector2 { x: 0.0, y: 0.0 };
     }
 
     return norm;
