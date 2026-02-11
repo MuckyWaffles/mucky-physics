@@ -61,16 +61,15 @@ fn main() {
         for particle in snap.particles.iter() {
             render_particle(&mut d, particle);
 
-            let part_pos = particle.pos - plane_pos;
-            let angle = f32::atan2(part_pos.x, part_pos.y);
+            // let part_pos = particle.pos - plane_pos;
+            // let angle = f32::atan2(part_pos.y, part_pos.x);
 
-            let start = f32::atan2(tri_start.x - plane_pos.x, tri_start.y - plane_pos.y);
-            let end = f32::atan2(tri_end.x - plane_pos.x, tri_end.y - plane_pos.y);
+            // let start = f32::atan2(tri_start.y - plane_pos.y, tri_start.x - plane_pos.x);
+            // let end = f32::atan2(tri_end.y - plane_pos.y, tri_end.x - plane_pos.x);
 
-            if angle > start && angle < end {
-            } else {
-                d.draw_line_v(particle.pos, plane_pos, Color::PURPLE);
-            }
+            // if angle_between(angle, start, end) {
+            // d.draw_line_v(particle.pos, plane_pos, Color::PURPLE);
+            // }
         }
         for wall in snap.walls.iter() {
             d.draw_rectangle_rec(wall, Color::WHITE);
@@ -111,7 +110,7 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
     let mut ship_vel = Vector2 { x: 0.0, y: 0.0 };
     let mut plane_pos = Vector2 {
         x: SCREEN_WIDTH as f32 * 0.5,
-        y: SCREEN_HEIGHT as f32 * 0.5,
+        y: SCREEN_HEIGHT as f32 * 0.8,
     };
 
     let mut cells: Vec<Cell> = Vec::with_capacity(32);
@@ -140,7 +139,7 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
             elapsed_time: elapsed,
             collision_time: 0,
         };
-        let mut ship_impulse = Vector2 { x: -0.1, y: 0.0 };
+        let mut ship_impulse = Vector2 { x: -0.02, y: 0.0 };
 
         // Create new particles
         particles.push(Particle::new(Vector2 { x: 0.0, y: 0.0 }));
@@ -214,8 +213,8 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
         // }
         plane_pos += ship_vel * dt;
 
-        if plane_pos.y - 190.0 > SCREEN_HEIGHT as f32 {
-            plane_pos.y = SCREEN_HEIGHT as f32 + 190.0;
+        if plane_pos.y - 180.0 > SCREEN_HEIGHT as f32 {
+            plane_pos.y = SCREEN_HEIGHT as f32 + 180.0;
         }
 
         // Building cells
@@ -364,56 +363,82 @@ fn create_ship(ship: Rectangle) -> Vec<Rectangle> {
     walls
 }
 
+fn normalize_angle(a: f32) -> f32 {
+    let mut a = a;
+    while a <= -std::f32::consts::PI {
+        a += 2.0 * std::f32::consts::PI;
+    }
+    while a > std::f32::consts::PI {
+        a -= 2.0 * std::f32::consts::PI;
+    }
+    a
+}
+
+fn angle_between(angle: f32, start: f32, end: f32) -> bool {
+    let angle = normalize_angle(angle);
+    let start = normalize_angle(start);
+    let end = normalize_angle(end);
+
+    if start <= end {
+        angle >= start && angle <= end
+    } else {
+        angle >= start || angle <= end
+    }
+}
+
 fn particle_plane_normal(part: &Particle, plane_pos: Vector2) -> Vector2 {
     let delta = plane_pos - part.pos;
     let dist = delta.length();
     let plane_radius = 240.0;
 
-    if (dist > plane_radius + part.radius) {
+    if dist > plane_radius + part.radius {
+        return Vector2 { x: 0.0, y: 0.0 };
+    }
+    if dist < 210.0 - part.radius {
         return Vector2 { x: 0.0, y: 0.0 };
     }
 
+    if dist == 0.0 {
+        return Vector2 { x: 0.0, y: 0.0 };
+    }
     let mut norm = delta / dist;
 
-    let tri_x = 240.0 * f32::sin(PI as f32 * 0.194);
-    let tri_y = 240.0 * f32::cos(PI as f32 * 0.194);
-    let tri_start = Vector2 {
-        x: -tri_x + plane_pos.x,
-        y: tri_y + plane_pos.y,
-    };
-    let tri_end = Vector2 {
-        x: tri_x + plane_pos.x,
-        y: tri_y + plane_pos.y,
-    };
-
     let part_pos = part.pos - plane_pos;
-    let angle = f32::atan2(part_pos.x, part_pos.y);
+    let angle = f32::atan2(part_pos.y, part_pos.x);
 
-    let start = f32::atan2(-tri_x, tri_y) - PI as f32;
-    let end = f32::atan2(tri_x, tri_y) - PI as f32;
+    let half_angle = PI as f32 * 0.194;
+    let start = -half_angle - PI as f32 / 2.0;
+    let end = half_angle - PI as f32 / 2.0;
 
-    let side_norm = Vector2 {
-        x: f32::sin(start - PI as f32 / 2.0),
-        y: f32::cos(start - PI as f32 / 2.0),
-    };
-
-    if angle > start && angle < end {
+    if angle_between(angle, start, end) {
         if (240.0 + part.radius) - dist < 2.0 {
             return norm;
+        } else if dist - (210.0 - part.radius) < 2.0 {
+            return -norm;
         }
+        // Radial side normals
+        let start_dir = Vector2 {
+            x: start.cos(),
+            y: start.sin(),
+        };
+        let end_dir = Vector2 {
+            x: end.cos(),
+            y: end.sin(),
+        };
 
-        if f32::abs(angle - start) < 5.0 {
-            norm = Vector2 {
-                x: -side_norm.x,
-                y: side_norm.y,
-            };
-        } else if f32::abs(angle - end) < 5.0 {
-            norm = Vector2 {
-                x: side_norm.x,
-                y: side_norm.y,
-            };
+        let start_norm = Vector2 {
+            x: -start_dir.y,
+            y: start_dir.x,
+        };
+        let end_norm = Vector2 {
+            x: end_dir.y,
+            y: -end_dir.x,
+        };
+        if f32::abs(angle - (start + 0.01)) < 0.1 * PI as f32 {
+            norm = start_norm;
+        } else if f32::abs(angle - (end - 0.01)) < 0.1 * PI as f32 {
+            norm = end_norm;
         }
-        println!("x{}, y{}", norm.x, norm.y);
     } else {
         norm = Vector2 { x: 0.0, y: 0.0 };
     }
