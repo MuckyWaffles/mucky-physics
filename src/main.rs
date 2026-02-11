@@ -3,6 +3,7 @@ use raylib::ffi::CheckCollisionCircleLine;
 use raylib::prelude::*;
 mod physics;
 use physics::*;
+use std::rc::Rc;
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -87,59 +88,11 @@ struct RenderParticle {
 fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
     let dt = 0.02;
 
-    // Creating empty particle array
     let mut particles = Vec::with_capacity(PARTICLE_LIMIT);
-    // for _i in 0..PARTICLE_LIMIT {
-    // particles.push(Particle::new(Vector2 { x: 0.0, y: 0.0 }));
-    // }
 
     let mut rng = rand::rng();
     let mut particles_alive: usize = 0;
-    // This code is kinda sloppy but whatevs
 
-    // let screen_half = Vector2 {
-    // x: SCREEN_WIDTH as f32 / 2.0 + 400.0,
-    // y: SCREEN_HEIGHT as f32 / 2.0,
-    // };
-    // for _i in 0..1000 {
-    // particles[particles_alive] = Particle::new(Vector2 {
-    //     x: rng.random_range(screen_half.x - 120.0..screen_half.x + 120.0),
-    //     y: rng.random_range(screen_half.y - 100.0..screen_half.y + 100.0),
-    // });
-    // particles[particles_alive] = Particle::new(Vector2 {
-    // x: rng.random_range(10.0..SCREEN_WIDTH as f32 - 10.0),
-    // y: rng.random_range(10.0..SCREEN_HEIGHT as f32 - 10.0),
-    // });
-    // Give new particles a starting velocity in a random direction
-    // let rand_dir = Vector2 {
-    // x: rng.random_range(-1.0..1.0),
-    // y: rng.random_range(-1.0..1.0),
-    // }
-    // .normalized();
-
-    // particles[particles_alive].vel = Vector2 {
-    // x: rand_dir.x * 200.0,
-    // y: rand_dir.y * 170.0,
-    // x: 100.0,
-    // y: rand_dir.y * 1.0,
-    // };
-    // particles_alive += 1;
-    // }
-
-    // particles.push(Particle::new(Vector2 {
-    //     x: SCREEN_WIDTH as f32 * 0.5,
-    //     y: SCREEN_HEIGHT as f32 * 0.5,
-    // }));
-    // particles[particles_alive].radius = 80.0;
-    // particles_alive += 1;
-
-    // let ship = Rectangle {
-    //     x: screen_half.x - 120.0,
-    //     y: screen_half.y - 90.0,
-    //     width: 260.0,
-    //     height: 180.0,
-    // };
-    // let mut walls = create_ship(ship);
     let walls: Vec<Rectangle> = Vec::with_capacity(0);
 
     // let ship_mass = particles_alive as f32 * 0.8;
@@ -165,7 +118,6 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
             },
         });
     }
-    let mut oldest_particle = 0;
 
     let mut elapsed: u64 = 0;
     loop {
@@ -179,8 +131,7 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
         };
         let mut ship_impulse = Vector2 { x: 0.0, y: 0.0 };
 
-        // Create new particle
-
+        // Create new particles
         particles.push(Particle::new(Vector2 { x: 0.0, y: 0.0 }));
         particles[particles_alive] = Particle::new(Vector2 {
             x: -10.0,
@@ -202,14 +153,6 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
         particles[particles_alive].mass = 0.1;
 
         particles_alive += 1;
-        if particles_alive > 800 {
-            particles.swap_remove(oldest_particle);
-            oldest_particle += 1;
-            if oldest_particle >= particles_alive {
-                oldest_particle = 0;
-            }
-            particles_alive -= 1;
-        }
 
         // Update every particle
         for part in particles[0..particles_alive].iter_mut() {
@@ -217,22 +160,24 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
             part.integrate(dt);
         }
 
+        let mut remove_queue: Vec<usize> = Vec::with_capacity(particles_alive);
+
         // Boundaries
-        for part in particles[0..particles_alive].iter_mut() {
-            if part.pos.x + part.radius > SCREEN_WIDTH as f32 {
-                // part.pos.x = SCREEN_WIDTH as f32 - part.radius;
-                // part.vel.x = -part.vel.x;
-            } else if part.pos.x - part.radius < 0.0 {
-                // part.pos.x = part.radius;
-                // part.vel.x = -part.vel.x;
+        for (i, part) in particles[0..particles_alive].iter_mut().enumerate() {
+            if part.pos.x + part.radius > SCREEN_WIDTH as f32 * 2.0 {
+            } else if part.pos.x - part.radius < -SCREEN_WIDTH as f32 {
+                remove_queue.push(i);
             }
             if part.pos.y + part.radius > SCREEN_HEIGHT as f32 {
-                part.pos.y = SCREEN_HEIGHT as f32 - part.radius;
+                part.pos.y = SCREEN_HEIGHT as f32 - part.radius * 2.0;
                 part.vel.y = -part.vel.y;
-            } else if part.pos.y - part.radius < 0.0 {
-                // part.pos.y = part.radius;
-                // part.vel.y = -part.vel.y;
+            } else if part.pos.y - part.radius < -SCREEN_HEIGHT as f32 {
+                remove_queue.push(i);
             }
+        }
+        for i in remove_queue {
+            particles.swap_remove(i);
+            particles_alive -= 1;
         }
 
         for part in particles[0..particles_alive].iter_mut() {
@@ -244,7 +189,9 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
                 continue;
             }
 
+            // let mut new_ship_vel = Vector2 { x: 0.0, y: 0.0 };
             physics::collide_with_mass(norm, &mut part.vel, part.mass, &mut ship_vel, ship_mass);
+            // ship_impulse += new_ship_vel - ship_vel;
         }
 
         //ship_impulse.y += GRAVITY;
