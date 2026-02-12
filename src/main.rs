@@ -110,14 +110,14 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
     let mut ship_vel = Vector2 { x: 0.0, y: 0.0 };
     let mut plane_pos = Vector2 {
         x: SCREEN_WIDTH as f32 * 0.5,
-        y: SCREEN_HEIGHT as f32 * 0.8,
+        y: SCREEN_HEIGHT as f32 * 1.2,
     };
 
     let mut cells: Vec<Cell> = Vec::with_capacity(32);
     let width = SCREEN_WIDTH as f32 / 8.0;
     let height = SCREEN_HEIGHT as f32 / 8.0;
 
-    for i in 0..128 {
+    for i in 0..64 {
         cells.push(Cell {
             particles: Vec::with_capacity(PARTICLE_LIMIT),
             rect: Rectangle {
@@ -139,30 +139,32 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
             elapsed_time: elapsed,
             collision_time: 0,
         };
-        let mut ship_impulse = Vector2 { x: -0.02, y: 0.0 };
+        let mut ship_impulse = Vector2 { x: -0.04, y: 0.0 };
 
         // Create new particles
-        particles.push(Particle::new(Vector2 { x: 0.0, y: 0.0 }));
-        particles[particles_alive] = Particle::new(Vector2 {
-            x: -10.0,
-            y: rng.random_range(10.0..SCREEN_HEIGHT as f32 - 10.0),
-        });
-        // Give new particles a starting velocity in a random direction
-        let rand_dir = Vector2 {
-            x: rng.random_range(-1.0..1.0),
-            y: rng.random_range(-1.0..1.0),
+        for i in 0..2 {
+            particles.push(Particle::new(Vector2 { x: 0.0, y: 0.0 }));
+            particles[particles_alive] = Particle::new(Vector2 {
+                x: -10.0,
+                y: rng.random_range(10.0..SCREEN_HEIGHT as f32 - 10.0),
+            });
+            // Give new particles a starting velocity in a random direction
+            let rand_dir = Vector2 {
+                x: rng.random_range(-1.0..1.0),
+                y: rng.random_range(-1.0..1.0),
+            }
+            .normalized();
+
+            particles[particles_alive].vel = Vector2 {
+                // x: rand_dir.x * 200.0,
+                // y: rand_dir.y * 170.0,
+                x: 100.0,
+                y: rand_dir.y * 10.0,
+            };
+            particles[particles_alive].mass = 0.1;
+
+            particles_alive += 1;
         }
-        .normalized();
-
-        particles[particles_alive].vel = Vector2 {
-            // x: rand_dir.x * 200.0,
-            // y: rand_dir.y * 170.0,
-            x: 100.0,
-            y: rand_dir.y * 10.0,
-        };
-        particles[particles_alive].mass = 0.1;
-
-        particles_alive += 1;
 
         // Update every particle
         for part in particles[0..particles_alive].iter_mut() {
@@ -434,9 +436,9 @@ fn particle_plane_normal(part: &Particle, plane_pos: Vector2) -> Vector2 {
             x: end_dir.y,
             y: -end_dir.x,
         };
-        if f32::abs(angle - (start + 0.01)) < 0.1 * PI as f32 {
+        if f32::abs(angle - start) < 0.2 * PI as f32 {
             norm = start_norm;
-        } else if f32::abs(angle - (end - 0.01)) < 0.1 * PI as f32 {
+        } else if f32::abs(angle - end) < 0.2 * PI as f32 {
             norm = end_norm;
         }
     } else {
