@@ -80,11 +80,13 @@ fn main() {
         let str2 = format!("Total Scalar Velocity: ({})", data.total_scalar_vel);
         let str3 = format!("Computation time (ms): {}", data.elapsed_time);
         let str4 = format!("Particle collision time (ms): {}", data.collision_time);
+        let str5 = format!("plane height: {}", plane_pos.y);
 
-        d.draw_text(&str, 10, 40, 18, Color::LIGHTGRAY);
-        d.draw_text(&str2, 10, 80, 18, Color::LIGHTGRAY);
-        d.draw_text(&str3, 10, 120, 18, Color::LIGHTGRAY);
-        d.draw_text(&str4, 10, 160, 18, Color::LIGHTGRAY);
+        d.draw_text(&str, 10, 20, 18, Color::LIGHTGRAY);
+        d.draw_text(&str2, 10, 60, 18, Color::LIGHTGRAY);
+        d.draw_text(&str3, 10, 100, 18, Color::LIGHTGRAY);
+        d.draw_text(&str4, 10, 140, 18, Color::LIGHTGRAY);
+        d.draw_text(&str5, 10, 180, 20, Color::LIGHTGRAY);
     }
 }
 
@@ -136,7 +138,7 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
             elapsed_time: elapsed,
             collision_time: 0,
         };
-        let mut ship_impulse = Vector2 { x: -0.034, y: 0.0 };
+        let mut ship_impulse = Vector2 { x: -0.028, y: 0.0 };
 
         // Create new particles
         let mut new_particles = particle_emitter(particles, &mut particles_alive);
