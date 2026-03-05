@@ -1,9 +1,7 @@
 use rand::prelude::*;
-use raylib::ffi::CheckCollisionCircleLine;
 use raylib::prelude::*;
 mod physics;
 use physics::*;
-use std::rc::Rc;
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -14,7 +12,7 @@ const SCREEN_HEIGHT: i32 = 800;
 const PARTICLE_LIMIT: usize = 10000;
 
 // const GRAVITY: f32 = 10.0;
-const GRAVITY: f32 = 1.0;
+const GRAVITY: f32 = 0.0;
 
 fn main() {
     // You know what I really like Rust syntax
@@ -100,7 +98,6 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
 
     let mut particles = Vec::with_capacity(PARTICLE_LIMIT);
 
-    let mut rng = rand::rng();
     let mut particles_alive: usize = 0;
 
     let walls: Vec<Rectangle> = Vec::with_capacity(0);
@@ -110,7 +107,7 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
     let mut ship_vel = Vector2 { x: 0.0, y: 0.0 };
     let mut plane_pos = Vector2 {
         x: SCREEN_WIDTH as f32 * 0.5,
-        y: SCREEN_HEIGHT as f32 * 1.2,
+        y: SCREEN_HEIGHT as f32 * 1.0,
     };
 
     let mut cells: Vec<Cell> = Vec::with_capacity(32);
@@ -139,84 +136,35 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
             elapsed_time: elapsed,
             collision_time: 0,
         };
-        let mut ship_impulse = Vector2 { x: -0.04, y: 0.0 };
+        let mut ship_impulse = Vector2 { x: -0.034, y: 0.0 };
 
         // Create new particles
-        for i in 0..2 {
-            particles.push(Particle::new(Vector2 { x: 0.0, y: 0.0 }));
-            particles[particles_alive] = Particle::new(Vector2 {
-                x: -10.0,
-                y: rng.random_range(10.0..SCREEN_HEIGHT as f32 - 10.0),
-            });
-            // Give new particles a starting velocity in a random direction
-            let rand_dir = Vector2 {
-                x: rng.random_range(-1.0..1.0),
-                y: rng.random_range(-1.0..1.0),
-            }
-            .normalized();
-
-            particles[particles_alive].vel = Vector2 {
-                // x: rand_dir.x * 200.0,
-                // y: rand_dir.y * 170.0,
-                x: 100.0,
-                y: rand_dir.y * 10.0,
-            };
-            particles[particles_alive].mass = 0.1;
-
-            particles_alive += 1;
-        }
+        let mut new_particles = particle_emitter(particles, &mut particles_alive);
 
         // Update every particle
-        for part in particles[0..particles_alive].iter_mut() {
-            //part.force.y += GRAVITY * part.mass;
+        for part in new_particles[0..particles_alive].iter_mut() {
+            part.force.y += GRAVITY * part.mass;
             part.integrate(dt);
         }
 
         let mut remove_queue: Vec<usize> = Vec::with_capacity(particles_alive);
 
         // Boundaries
-        for (i, part) in particles[0..particles_alive].iter_mut().enumerate() {
+        for (i, part) in new_particles[0..particles_alive].iter_mut().enumerate() {
             if part.pos.x + part.radius > SCREEN_WIDTH as f32 * 2.0 {
                 remove_queue.push(i);
             } else if part.pos.x - part.radius < -SCREEN_WIDTH as f32 {
                 remove_queue.push(i);
             }
-            if part.pos.y + part.radius > SCREEN_HEIGHT as f32 {
-                part.pos.y = SCREEN_HEIGHT as f32 - part.radius * 2.0;
-                part.vel.y = -part.vel.y;
-            } else if part.pos.y - part.radius < -SCREEN_HEIGHT as f32 {
-                remove_queue.push(i);
-            }
+            // if part.pos.y - part.radius > SCREEN_HEIGHT as f32 {
+            // remove_queue.push(i);
+            // } else if part.pos.y - part.radius < -SCREEN_HEIGHT as f32 {
+            // remove_queue.push(i);
+            // }
         }
         for i in remove_queue {
-            particles.swap_remove(i);
+            new_particles.swap_remove(i);
             particles_alive -= 1;
-        }
-
-        for part in particles[0..particles_alive].iter_mut() {
-            // particle_collide_wall(part, &mut walls, ship_mass, ship_vel, &mut ship_impulse);
-
-            let zero = Vector2 { x: 0.0, y: 0.0 };
-            let norm = particle_plane_normal(part, plane_pos);
-            if norm == zero {
-                continue;
-            }
-
-            // let mut new_ship_vel = Vector2 { x: 0.0, y: 0.0 };
-            physics::collide_with_mass(norm, &mut part.vel, part.mass, &mut ship_vel, ship_mass);
-            // ship_impulse += new_ship_vel - ship_vel;
-        }
-
-        //ship_impulse.y += GRAVITY;
-        ship_vel += ship_impulse;
-        // for wall in walls.iter_mut() {
-        // wall.x += ship_vel.x * dt;
-        // wall.y += ship_vel.y * dt;
-        // }
-        plane_pos += ship_vel * dt;
-
-        if plane_pos.y - 180.0 > SCREEN_HEIGHT as f32 {
-            plane_pos.y = SCREEN_HEIGHT as f32 + 180.0;
         }
 
         // Building cells
@@ -224,7 +172,7 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
             cell.particles.clear();
         }
         for i in 0..particles_alive {
-            let p = &particles[i];
+            let p = &new_particles[i];
 
             for cell in cells.iter_mut() {
                 if cell.rect.check_collision_circle_rec(p.pos, p.radius) {
@@ -233,7 +181,7 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
             }
         }
 
-        for part in particles[0..particles_alive].iter_mut() {
+        for part in new_particles[0..particles_alive].iter_mut() {
             data.total_vector_vel += part.vel;
             data.total_scalar_vel += part.vel.length();
         }
@@ -248,16 +196,43 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
                     let i = indices[a_idx];
                     let j = indices[b_idx];
 
-                    let (left, right) = particles.split_at_mut(j);
+                    let (left, right) = new_particles.split_at_mut(j);
                     let (pa, pb) = { (&mut left[i], &mut right[0]) };
 
                     Particle::collide(pa, pb);
                 }
             }
         }
+
+        for part in new_particles[0..particles_alive].iter_mut() {
+            // particle_collide_wall(part, &mut walls, ship_mass, ship_vel, &mut ship_impulse);
+
+            let zero = Vector2 { x: 0.0, y: 0.0 };
+            let norm = particle_plane_normal(part, plane_pos);
+            if norm == zero {
+                continue;
+            }
+
+            // let mut new_ship_vel = Vector2 { x: 0.0, y: 0.0 };
+            physics::collide_with_mass(norm, &mut part.vel, part.mass, &mut ship_vel, ship_mass);
+            // ship_impulse += new_ship_vel - ship_vel;
+        }
+
+        ship_impulse.y += GRAVITY;
+        ship_vel += ship_impulse;
+        // for wall in walls.iter_mut() {
+        // wall.x += ship_vel.x * dt;
+        // wall.y += ship_vel.y * dt;
+        // }
+        plane_pos += ship_vel * dt;
+
+        if plane_pos.y - 180.0 > SCREEN_HEIGHT as f32 {
+            plane_pos.y = SCREEN_HEIGHT as f32 + 180.0;
+        }
+
         data.collision_time = collide_start.elapsed().as_millis() as u64;
 
-        let particle_snap: Vec<RenderParticle> = particles[0..particles_alive]
+        let particle_snap: Vec<RenderParticle> = new_particles[0..particles_alive]
             .iter()
             .map(|p| RenderParticle {
                 pos: p.pos,
@@ -272,6 +247,8 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
             plane: plane_pos,
         };
         tx.send((snapshot, data)).unwrap();
+
+        particles = new_particles.clone();
 
         elapsed = now.elapsed().as_millis() as u64;
         let sleep_time = i64::max(20 - elapsed as i64, 0);
@@ -388,7 +365,7 @@ fn angle_between(angle: f32, start: f32, end: f32) -> bool {
     }
 }
 
-fn particle_plane_normal(part: &Particle, plane_pos: Vector2) -> Vector2 {
+fn particle_plane_normal(part: &mut Particle, plane_pos: Vector2) -> Vector2 {
     let delta = plane_pos - part.pos;
     let dist = delta.length();
     let plane_radius = 240.0;
@@ -412,37 +389,32 @@ fn particle_plane_normal(part: &Particle, plane_pos: Vector2) -> Vector2 {
     let start = -half_angle - PI as f32 / 2.0;
     let end = half_angle - PI as f32 / 2.0;
 
-    if angle_between(angle, start, end) {
-        if (240.0 + part.radius) - dist < 2.0 {
-            return norm;
-        } else if dist - (210.0 - part.radius) < 2.0 {
-            return -norm;
-        }
-        // Radial side normals
-        let start_dir = Vector2 {
-            x: start.cos(),
-            y: start.sin(),
-        };
-        let end_dir = Vector2 {
-            x: end.cos(),
-            y: end.sin(),
-        };
-
-        let start_norm = Vector2 {
-            x: -start_dir.y,
-            y: start_dir.x,
-        };
-        let end_norm = Vector2 {
-            x: end_dir.y,
-            y: -end_dir.x,
-        };
-        if f32::abs(angle - start) < 0.2 * PI as f32 {
-            norm = start_norm;
-        } else if f32::abs(angle - end) < 0.2 * PI as f32 {
-            norm = end_norm;
-        }
-    } else {
+    if !angle_between(angle, start + 0.1, end - 0.1) {
         norm = Vector2 { x: 0.0, y: 0.0 };
+        return norm;
+    }
+
+    let outer_circle = (plane_radius + part.radius) - dist;
+    let inner_circle = dist - (210.0 - part.radius);
+    let left_side = f32::abs(angle - (start + 0.1));
+    let right_side = f32::abs(angle - (end - 0.1));
+
+    if outer_circle < 2.0 {
+        return norm;
+    } else if inner_circle < 2.0 {
+        return -norm;
+    }
+
+    if left_side < 0.1 * PI as f32 {
+        norm = Vector2 {
+            x: -f32::sin(start),
+            y: f32::cos(start),
+        };
+    } else if right_side < 0.1 * PI as f32 {
+        norm = Vector2 {
+            x: f32::sin(end),
+            y: -f32::cos(end),
+        };
     }
 
     return norm;
@@ -498,4 +470,34 @@ fn particle_collide_wall(
             }
         }
     }
+}
+
+fn particle_emitter(mut particles: Vec<Particle>, particles_alive: &mut usize) -> Vec<Particle> {
+    let mut rng = rand::rng();
+
+    for _ in 0..2 {
+        particles.push(Particle::new(Vector2 { x: 0.0, y: 0.0 }));
+        particles[*particles_alive] = Particle::new(Vector2 {
+            x: -10.0,
+            y: rng.random_range(10.0..SCREEN_HEIGHT as f32 - 10.0),
+        });
+        // Give new particles a starting velocity in a random direction
+        let rand_dir = Vector2 {
+            x: rng.random_range(-1.0..1.0),
+            y: rng.random_range(-1.0..1.0),
+        }
+        .normalized();
+
+        particles[*particles_alive].vel = Vector2 {
+            // x: rand_dir.x * 200.0,
+            // y: rand_dir.y * 170.0,
+            x: 100.0 + rand_dir.x * 10.0,
+            y: rand_dir.y * 10.0,
+        };
+        particles[*particles_alive].mass = 0.1;
+
+        *particles_alive += 1;
+    }
+
+    return particles;
 }

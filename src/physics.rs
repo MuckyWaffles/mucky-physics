@@ -1,5 +1,6 @@
 use raylib::prelude::*;
 
+#[derive(Clone)]
 pub struct Particle {
     pub pos: Vector2,
     pub vel: Vector2,
