@@ -36,24 +36,14 @@ fn main() {
         d.clear_background(Color::BLACK);
 
         let plane_pos = snap.plane;
-        // I really wish this function could operate in radians
-        d.draw_circle_sector(plane_pos, 240.0, 300.0, 240.0, 20, Color::WHITE);
-        d.draw_circle_sector(plane_pos, 210.0, 300.0, 240.0, 20, Color::BLACK);
-
-        d.draw_circle_lines_v(plane_pos, 240.0, Color::PURPLE);
-        d.draw_circle_lines_v(plane_pos, 210.0, Color::PURPLE);
-        let tri_x = 240.0 * f32::sin(PI as f32 * 0.194);
-        let tri_start = Vector2 {
-            x: -tri_x + plane_pos.x,
-            y: -240.0 + plane_pos.y,
-        };
-        let tri_end = Vector2 {
-            x: tri_x + plane_pos.x,
-            y: -240.0 + plane_pos.y,
-        };
-        d.draw_line_v(plane_pos, tri_start, Color::PURPLE);
-        d.draw_line_v(plane_pos, tri_end, Color::PURPLE);
-        d.draw_line_v(tri_start, tri_end, Color::PURPLE);
+        d.draw_circle_v(plane_pos, 140.0, Color::WHITE);
+        d.draw_rectangle(
+            (plane_pos.x - 140.0) as i32,
+            (plane_pos.y - 70.0) as i32,
+            480,
+            480,
+            Color::BLACK,
+        );
 
         // Render every particle
         for particle in snap.particles.iter() {
@@ -109,7 +99,7 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
     let mut ship_vel = Vector2 { x: 0.0, y: 0.0 };
     let mut plane_pos = Vector2 {
         x: SCREEN_WIDTH as f32 * 0.5,
-        y: SCREEN_HEIGHT as f32 * 1.0,
+        y: SCREEN_HEIGHT as f32 * 0.5,
     };
 
     let mut cells: Vec<Cell> = Vec::with_capacity(32);
@@ -228,9 +218,9 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
         // }
         plane_pos += ship_vel * dt;
 
-        if plane_pos.y - 180.0 > SCREEN_HEIGHT as f32 {
-            plane_pos.y = SCREEN_HEIGHT as f32 + 180.0;
-        }
+        // if plane_pos.y - 180.0 > SCREEN_HEIGHT as f32 {
+        // plane_pos.y = SCREEN_HEIGHT as f32 + 180.0;
+        // }
 
         data.collision_time = collide_start.elapsed().as_millis() as u64;
 
@@ -370,54 +360,26 @@ fn angle_between(angle: f32, start: f32, end: f32) -> bool {
 fn particle_plane_normal(part: &mut Particle, plane_pos: Vector2) -> Vector2 {
     let delta = plane_pos - part.pos;
     let dist = delta.length();
-    let plane_radius = 240.0;
+    let plane_radius = 140.0;
 
     if dist > plane_radius + part.radius {
-        return Vector2 { x: 0.0, y: 0.0 };
-    }
-    if dist < 210.0 - part.radius {
         return Vector2 { x: 0.0, y: 0.0 };
     }
 
     if dist == 0.0 {
         return Vector2 { x: 0.0, y: 0.0 };
     }
-    let mut norm = delta / dist;
+    let norm = delta / dist;
 
     let part_pos = part.pos - plane_pos;
-    let angle = f32::atan2(part_pos.y, part_pos.x);
 
-    let half_angle = PI as f32 * 0.194;
-    let start = -half_angle - PI as f32 / 2.0;
-    let end = half_angle - PI as f32 / 2.0;
-
-    if !angle_between(angle, start + 0.1, end - 0.1) {
-        norm = Vector2 { x: 0.0, y: 0.0 };
-        return norm;
+    if part_pos.y - part.radius > -74.0 {
+        if part_pos.y - part.radius < -70.0 {
+            return Vector2 { x: 0.0, y: 1.0 };
+        }
+        return Vector2 { x: 0.0, y: 0.0 };
     }
-
-    let outer_circle = (plane_radius + part.radius) - dist;
-    let inner_circle = dist - (210.0 - part.radius);
-    let left_side = f32::abs(angle - (start + 0.1));
-    let right_side = f32::abs(angle - (end - 0.1));
-
-    if outer_circle < 2.0 {
-        return norm;
-    } else if inner_circle < 2.0 {
-        return -norm;
-    }
-
-    if left_side < 0.1 * PI as f32 {
-        norm = Vector2 {
-            x: -f32::sin(start),
-            y: f32::cos(start),
-        };
-    } else if right_side < 0.1 * PI as f32 {
-        norm = Vector2 {
-            x: f32::sin(end),
-            y: -f32::cos(end),
-        };
-    }
+    if part.vel.dot(norm) < 0.0 {}
 
     return norm;
 }
