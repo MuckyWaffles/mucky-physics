@@ -28,6 +28,8 @@ fn main() {
     let (tx, rx) = mpsc::channel();
     thread::spawn(|| physics_thread(tx));
 
+    let mut show_info = true;
+
     while !rl.window_should_close() {
         let (snap, data) = rx.recv().unwrap();
 
@@ -35,72 +37,79 @@ fn main() {
 
         d.clear_background(Color::BLACK);
 
-        let plane_pos = snap.plane;
-        d.draw_circle_v(plane_pos, 140.0, Color::WHITE);
-        d.draw_rectangle(
-            (plane_pos.x - 140.0) as i32,
-            (plane_pos.y - 70.0) as i32,
-            480,
-            480,
-            Color::BLACK,
-        );
-
-        // Render every particle
-        for particle in snap.particles.iter() {
-            render_particle(&mut d, particle);
-
-            // let part_pos = particle.pos - plane_pos;
-            // let angle = f32::atan2(part_pos.y, part_pos.x);
-
-            // let start = f32::atan2(tri_start.y - plane_pos.y, tri_start.x - plane_pos.x);
-            // let end = f32::atan2(tri_end.y - plane_pos.y, tri_end.x - plane_pos.x);
-
-            // if angle_between(angle, start, end) {
-            // d.draw_line_v(particle.pos, plane_pos, Color::PURPLE);
-            // }
-        }
-        for wall in snap.walls.iter() {
-            d.draw_rectangle_rec(wall, Color::WHITE);
+        for body in snap.bodies.iter() {
+            match body.shape {
+                Shape::Circle(a) => d.draw_circle_v(body.motion.pos, a.radius, Color::WHITE),
+                Shape::CircleSeg(a) => {
+                    d.draw_circle_v(body.motion.pos, a.radius, Color::WHITE);
+                    d.draw_rectangle(
+                        (body.motion.pos.x - a.radius) as i32,
+                        (body.motion.pos.y) as i32,
+                        (a.radius * 2.0) as i32,
+                        (a.radius * 2.0) as i32,
+                        Color::BLACK,
+                    );
+                }
+            }
         }
 
-        let str = format!(
-            "Total Vector Velocity: ({}, {})",
-            data.total_vector_vel.x, data.total_vector_vel.y,
-        );
-        let str2 = format!("Total Scalar Velocity: ({})", data.total_scalar_vel);
-        let str3 = format!("Computation time (ms): {}", data.elapsed_time);
-        let str4 = format!("Particle collision time (ms): {}", data.collision_time);
-        let str5 = format!("plane height: {}", plane_pos.y);
+        let options_window = Rectangle {
+            x: SCREEN_WIDTH as f32 - 180.0,
+            y: SCREEN_HEIGHT as f32 - 180.0,
+            width: 160.0,
+            height: 160.0,
+        };
+        _ = d.gui_window_box(options_window, "Menu");
 
-        d.draw_text(&str, 10, 20, 18, Color::LIGHTGRAY);
-        d.draw_text(&str2, 10, 60, 18, Color::LIGHTGRAY);
-        d.draw_text(&str3, 10, 100, 18, Color::LIGHTGRAY);
-        d.draw_text(&str4, 10, 140, 18, Color::LIGHTGRAY);
-        d.draw_text(&str5, 10, 180, 20, Color::LIGHTGRAY);
+        if d.gui_label_button(
+            Rectangle {
+                x: options_window.x + 20.0,
+                y: options_window.y + 30.0,
+                width: 80.0,
+                height: 20.0,
+            },
+            "Show Info",
+        ) {
+            show_info = !show_info;
+        }
+
+        if show_info {
+            if d.gui_window_box(
+                Rectangle {
+                    x: 10.0,
+                    y: 10.0,
+                    width: 400.0,
+                    height: 240.0,
+                },
+                "Menu",
+            ) {
+                show_info = false;
+            }
+
+            let str = format!(
+                "Total Vector Velocity: ({}, {})",
+                data.total_vector_vel.x, data.total_vector_vel.y,
+            );
+            let str2 = format!("Total Scalar Velocity: ({})", data.total_scalar_vel);
+            let str3 = format!("Computation time (ms): {}", data.elapsed_time);
+            let str4 = format!("Particle collision time (ms): {}", data.collision_time);
+            // let str5 = format!("plane height: {}", plane_pos.y);
+
+            let text_color = Color::DARKSLATEGRAY;
+            d.draw_text(&str, 20, 50, 18, text_color);
+            d.draw_text(&str2, 20, 90, 18, text_color);
+            d.draw_text(&str3, 20, 130, 18, text_color);
+            d.draw_text(&str4, 20, 170, 18, text_color);
+            // d.draw_text(&str5, 20, 210, 18, text_color);
+        }
     }
-}
-
-struct RenderParticle {
-    pos: Vector2,
-    radius: f32,
 }
 
 fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
     let dt = 0.02;
 
-    let mut particles = Vec::with_capacity(PARTICLE_LIMIT);
-
-    let mut particles_alive: usize = 0;
-
-    let walls: Vec<Rectangle> = Vec::with_capacity(0);
-
-    // let ship_mass = particles_alive as f32 * 0.8;
-    let ship_mass = 40.0;
-    let mut ship_vel = Vector2 { x: 0.0, y: 0.0 };
-    let mut plane_pos = Vector2 {
-        x: SCREEN_WIDTH as f32 * 0.5,
-        y: SCREEN_HEIGHT as f32 * 0.5,
-    };
+    let mut bodies: Vec<Body> = Vec::with_capacity(PARTICLE_LIMIT);
+    let mut bodies_alive: usize = 0;
 
     let mut cells: Vec<Cell> = Vec::with_capacity(32);
     let width = SCREEN_WIDTH as f32 / 8.0;
@@ -118,6 +127,16 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
         });
     }
 
+    let radius = 180.0;
+    bodies.push(Body::new(
+        Vector2 {
+            x: SCREEN_WIDTH as f32 / 2.0,
+            y: SCREEN_HEIGHT as f32 / 2.0,
+        },
+        Shape::CircleSeg(CircleSeg::new(radius, Vector2 { x: 0.242, y: 0.97 })),
+    ));
+    bodies[0].motion.mass = 100.0;
+
     let mut elapsed: u64 = 0;
     loop {
         let now = Instant::now();
@@ -128,54 +147,54 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
             elapsed_time: elapsed,
             collision_time: 0,
         };
-        let mut ship_impulse = Vector2 { x: -0.028, y: 0.0 };
+
+        // Update every body
+        for body in bodies[0..bodies_alive].iter_mut() {
+            body.motion.force.y += GRAVITY * body.motion.mass;
+            body.motion.integrate(dt);
+        }
 
         // Create new particles
-        let mut new_particles = particle_emitter(particles, &mut particles_alive);
+        let mut new_bodies = body_emitter(bodies.clone(), &mut bodies_alive);
+        let mut remove_queue: Vec<usize> = Vec::with_capacity(bodies_alive);
 
-        // Update every particle
-        for part in new_particles[0..particles_alive].iter_mut() {
-            part.force.y += GRAVITY * part.mass;
-            part.integrate(dt);
-        }
-
-        let mut remove_queue: Vec<usize> = Vec::with_capacity(particles_alive);
-
-        // Boundaries
-        for (i, part) in new_particles[0..particles_alive].iter_mut().enumerate() {
-            if part.pos.x + part.radius > SCREEN_WIDTH as f32 * 2.0 {
-                remove_queue.push(i);
-            } else if part.pos.x - part.radius < -SCREEN_WIDTH as f32 {
+        for (i, body) in new_bodies[0..bodies_alive].iter_mut().enumerate() {
+            if body.motion.pos.x > SCREEN_WIDTH as f32 * 2.0 {
                 remove_queue.push(i);
             }
-            // if part.pos.y - part.radius > SCREEN_HEIGHT as f32 {
-            // remove_queue.push(i);
-            // } else if part.pos.y - part.radius < -SCREEN_HEIGHT as f32 {
-            // remove_queue.push(i);
-            // }
         }
-        for i in remove_queue {
-            new_particles.swap_remove(i);
-            particles_alive -= 1;
+
+        for i in remove_queue.iter().rev() {
+            new_bodies.swap_remove(*i);
+            bodies_alive -= 1;
         }
 
         // Building cells
         for cell in cells.iter_mut() {
             cell.particles.clear();
         }
-        for i in 0..particles_alive {
-            let p = &new_particles[i];
+        for i in 0..bodies_alive {
+            let b = &new_bodies[i];
 
             for cell in cells.iter_mut() {
-                if cell.rect.check_collision_circle_rec(p.pos, p.radius) {
-                    cell.particles.push(i);
+                match b.shape {
+                    Shape::Circle(a) => {
+                        if cell.rect.check_collision_circle_rec(b.motion.pos, a.radius) {
+                            cell.particles.push(i);
+                        }
+                    }
+                    Shape::CircleSeg(a) => {
+                        if cell.rect.check_collision_circle_rec(b.motion.pos, a.radius) {
+                            cell.particles.push(i);
+                        }
+                    }
                 }
             }
         }
 
-        for part in new_particles[0..particles_alive].iter_mut() {
-            data.total_vector_vel += part.vel;
-            data.total_scalar_vel += part.vel.length();
+        for body in new_bodies[0..bodies_alive].iter_mut() {
+            data.total_vector_vel += body.motion.vel;
+            data.total_scalar_vel += body.motion.vel.length();
         }
 
         // Handling all collisions between particles
@@ -188,59 +207,38 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
                     let i = indices[a_idx];
                     let j = indices[b_idx];
 
-                    let (left, right) = new_particles.split_at_mut(j);
+                    let (left, right) = new_bodies.split_at_mut(j);
                     let (pa, pb) = { (&mut left[i], &mut right[0]) };
 
-                    Particle::collide(pa, pb);
+                    let norm = Shape::collide(
+                        &pa.shape,
+                        pa.motion.pos,
+                        pa.motion.vel,
+                        &pb.shape,
+                        pb.motion.pos,
+                        pb.motion.vel,
+                    )
+                    .unwrap_or(Vector2 { x: 0.0, y: 0.0 });
+
+                    collide_with_mass(
+                        norm,
+                        &mut pa.motion.vel,
+                        pa.motion.mass,
+                        &mut pb.motion.vel,
+                        pb.motion.mass,
+                    );
                 }
             }
         }
 
-        for part in new_particles[0..particles_alive].iter_mut() {
-            // particle_collide_wall(part, &mut walls, ship_mass, ship_vel, &mut ship_impulse);
-
-            let zero = Vector2 { x: 0.0, y: 0.0 };
-            let norm = particle_plane_normal(part, plane_pos);
-            if norm == zero {
-                continue;
-            }
-
-            // let mut new_ship_vel = Vector2 { x: 0.0, y: 0.0 };
-            physics::collide_with_mass(norm, &mut part.vel, part.mass, &mut ship_vel, ship_mass);
-            // ship_impulse += new_ship_vel - ship_vel;
-        }
-
-        ship_impulse.y += GRAVITY;
-        ship_vel += ship_impulse;
-        // for wall in walls.iter_mut() {
-        // wall.x += ship_vel.x * dt;
-        // wall.y += ship_vel.y * dt;
-        // }
-        plane_pos += ship_vel * dt;
-
-        // if plane_pos.y - 180.0 > SCREEN_HEIGHT as f32 {
-        // plane_pos.y = SCREEN_HEIGHT as f32 + 180.0;
-        // }
-
         data.collision_time = collide_start.elapsed().as_millis() as u64;
 
-        let particle_snap: Vec<RenderParticle> = new_particles[0..particles_alive]
-            .iter()
-            .map(|p| RenderParticle {
-                pos: p.pos,
-                radius: p.radius,
-            })
-            .collect();
-        let wall_snap: Vec<Rectangle> = walls.clone();
-
         let snapshot = Snapshot {
-            particles: particle_snap,
-            walls: wall_snap,
-            plane: plane_pos,
+            bodies: new_bodies.clone(),
         };
         tx.send((snapshot, data)).unwrap();
 
-        particles = new_particles.clone();
+        bodies = new_bodies;
 
         elapsed = now.elapsed().as_millis() as u64;
         let sleep_time = i64::max(20 - elapsed as i64, 0);
@@ -254,9 +252,7 @@ struct Cell {
 }
 
 struct Snapshot {
-    particles: Vec<RenderParticle>,
-    walls: Vec<Rectangle>,
-    plane: Vector2,
+    bodies: Vec<Body>,
 }
 
 struct Data {
@@ -266,202 +262,117 @@ struct Data {
     collision_time: u64,
 }
 
-fn render_particle(d: &mut RaylibDrawHandle, particle: &RenderParticle) -> () {
-    d.draw_circle_v(particle.pos, particle.radius, Color::WHITE)
-}
+// fn particle_check_wall(part: &Particle, wall: &Rectangle) -> Vector2 {
+//     let left = Vector2 { x: -1.0, y: 0.0 };
+//     let right = Vector2 { x: 1.0, y: 0.0 };
+//     let up = Vector2 { x: 0.0, y: -1.0 };
+//     let down = Vector2 { x: 0.0, y: 1.0 };
 
-fn particle_check_wall(part: &Particle, wall: &Rectangle) -> Vector2 {
-    let left = Vector2 { x: -1.0, y: 0.0 };
-    let right = Vector2 { x: 1.0, y: 0.0 };
-    let up = Vector2 { x: 0.0, y: -1.0 };
-    let down = Vector2 { x: 0.0, y: 1.0 };
+//     if !wall.check_collision_circle_rec(part.pos, part.radius) {
+//         return Vector2 { x: 0.0, y: 0.0 };
+//     }
 
-    if !wall.check_collision_circle_rec(part.pos, part.radius) {
-        return Vector2 { x: 0.0, y: 0.0 };
-    }
+//     let l = wall.x + wall.width - (part.pos.x - part.radius);
+//     let r = part.pos.x + part.radius - wall.x;
+//     let u = wall.y + wall.height - (part.pos.y - part.radius);
+//     let d = part.pos.y + part.radius - wall.y;
 
-    let l = wall.x + wall.width - (part.pos.x - part.radius);
-    let r = part.pos.x + part.radius - wall.x;
-    let u = wall.y + wall.height - (part.pos.y - part.radius);
-    let d = part.pos.y + part.radius - wall.y;
+//     let min = f32::min(f32::min(l, r), f32::min(u, d));
 
-    let min = f32::min(f32::min(l, r), f32::min(u, d));
+//     if min == l {
+//         return right;
+//     } else if min == r {
+//         return left;
+//     } else if min == u {
+//         return down;
+//     } else {
+//         return up;
+//     }
+// }
 
-    if min == l {
-        return right;
-    } else if min == r {
-        return left;
-    } else if min == u {
-        return down;
-    } else {
-        return up;
-    }
-}
+// fn particle_collide_wall(
+//     part: &mut Particle,
+//     walls: &mut Vec<Rectangle>,
+//     ship_mass: f32,
+//     ship_vel: Vector2,
+//     ship_impulse: &mut Vector2,
+// ) {
+//     let left = Vector2 { x: -1.0, y: 0.0 };
+//     let right = Vector2 { x: 1.0, y: 0.0 };
+//     let up = Vector2 { x: 0.0, y: -1.0 };
+//     let down = Vector2 { x: 0.0, y: 1.0 };
 
-fn create_ship(ship: Rectangle) -> Vec<Rectangle> {
-    let mut walls = Vec::with_capacity(5);
-    walls.push(Rectangle {
-        x: ship.x - 20.0,
-        y: ship.y,
-        width: 20.0,
-        height: ship.height,
-    });
-    walls.push(Rectangle {
-        x: ship.x,
-        y: ship.y - 20.0,
-        width: ship.width,
-        height: 20.0,
-    });
-    walls.push(Rectangle {
-        x: ship.x,
-        y: ship.y + ship.height,
-        width: ship.width,
-        height: 20.0,
-    });
-    walls.push(Rectangle {
-        x: ship.x + ship.width,
-        y: ship.y,
-        width: 20.0,
-        height: 75.0,
-    });
-    walls.push(Rectangle {
-        x: ship.x + ship.width,
-        y: ship.y + ship.height - 75.0,
-        width: 20.0,
-        height: 75.0,
-    });
+//     let zero = Vector2 { x: 0.0, y: 0.0 };
+//     for wall in walls.iter() {
+//         let m1 = ship_mass;
+//         let m2 = part.mass;
 
-    walls
-}
+//         let norm = particle_check_wall(part, wall);
+//         if norm == zero {
+//             continue;
+//         }
 
-fn normalize_angle(a: f32) -> f32 {
-    let mut a = a;
-    while a <= -std::f32::consts::PI {
-        a += 2.0 * std::f32::consts::PI;
-    }
-    while a > std::f32::consts::PI {
-        a -= 2.0 * std::f32::consts::PI;
-    }
-    a
-}
+//         let v1 = ship_vel.x;
+//         let v2 = part.vel.x;
+//         if norm == right || norm == left {
+//             let vcm = (v1 * m1 + v2 * m2) / (m1 + m2);
+//             ship_impulse.x += (2.0 * vcm - v1) - ship_vel.x;
+//             part.vel.x = 2.0 * vcm - v2;
 
-fn angle_between(angle: f32, start: f32, end: f32) -> bool {
-    let angle = normalize_angle(angle);
-    let start = normalize_angle(start);
-    let end = normalize_angle(end);
+//             if norm == right {
+//                 part.pos.x = wall.x + wall.width + part.radius;
+//             } else if norm == left {
+//                 part.pos.x = wall.x - part.radius;
+//             }
+//         }
 
-    if start <= end {
-        angle >= start && angle <= end
-    } else {
-        angle >= start || angle <= end
-    }
-}
+//         let v1 = ship_vel.y;
+//         let v2 = part.vel.y;
+//         if norm == down || norm == up {
+//             let vcm = (v1 * m1 + v2 * m2) / (m1 + m2);
+//             ship_impulse.y += (2.0 * vcm - v1) - ship_vel.y;
+//             part.vel.y = 2.0 * vcm - v2;
 
-fn particle_plane_normal(part: &mut Particle, plane_pos: Vector2) -> Vector2 {
-    let delta = plane_pos - part.pos;
-    let dist = delta.length();
-    let plane_radius = 140.0;
+//             if norm == down {
+//                 part.pos.y = wall.y + wall.height + part.radius;
+//             } else if norm == up {
+//                 part.pos.y = wall.y - part.radius;
+//             }
+//         }
+//     }
+// }
 
-    if dist > plane_radius + part.radius {
-        return Vector2 { x: 0.0, y: 0.0 };
-    }
+const PARTICLES_PER_TICK: u32 = 2;
 
-    if dist == 0.0 {
-        return Vector2 { x: 0.0, y: 0.0 };
-    }
-    let norm = delta / dist;
-
-    let part_pos = part.pos - plane_pos;
-
-    if part_pos.y - part.radius > -74.0 {
-        if part_pos.y - part.radius < -70.0 {
-            return Vector2 { x: 0.0, y: 1.0 };
-        }
-        return Vector2 { x: 0.0, y: 0.0 };
-    }
-    if part.vel.dot(norm) < 0.0 {}
-
-    return norm;
-}
-
-fn particle_collide_wall(
-    part: &mut Particle,
-    walls: &mut Vec<Rectangle>,
-    ship_mass: f32,
-    ship_vel: Vector2,
-    ship_impulse: &mut Vector2,
-) {
-    let left = Vector2 { x: -1.0, y: 0.0 };
-    let right = Vector2 { x: 1.0, y: 0.0 };
-    let up = Vector2 { x: 0.0, y: -1.0 };
-    let down = Vector2 { x: 0.0, y: 1.0 };
-
-    let zero = Vector2 { x: 0.0, y: 0.0 };
-    for wall in walls.iter() {
-        let m1 = ship_mass;
-        let m2 = part.mass;
-
-        let norm = particle_check_wall(part, wall);
-        if norm == zero {
-            continue;
-        }
-
-        let v1 = ship_vel.x;
-        let v2 = part.vel.x;
-        if norm == right || norm == left {
-            let vcm = (v1 * m1 + v2 * m2) / (m1 + m2);
-            ship_impulse.x += (2.0 * vcm - v1) - ship_vel.x;
-            part.vel.x = 2.0 * vcm - v2;
-
-            if norm == right {
-                part.pos.x = wall.x + wall.width + part.radius;
-            } else if norm == left {
-                part.pos.x = wall.x - part.radius;
-            }
-        }
-
-        let v1 = ship_vel.y;
-        let v2 = part.vel.y;
-        if norm == down || norm == up {
-            let vcm = (v1 * m1 + v2 * m2) / (m1 + m2);
-            ship_impulse.y += (2.0 * vcm - v1) - ship_vel.y;
-            part.vel.y = 2.0 * vcm - v2;
-
-            if norm == down {
-                part.pos.y = wall.y + wall.height + part.radius;
-            } else if norm == up {
-                part.pos.y = wall.y - part.radius;
-            }
-        }
-    }
-}
-
-fn particle_emitter(mut particles: Vec<Particle>, particles_alive: &mut usize) -> Vec<Particle> {
+fn body_emitter(mut bodies: Vec<Body>, bodies_alive: &mut usize) -> Vec<Body> {
     let mut rng = rand::rng();
 
-    for _ in 0..2 {
-        particles.push(Particle::new(Vector2 { x: 0.0, y: 0.0 }));
-        particles[*particles_alive] = Particle::new(Vector2 {
-            x: -10.0,
-            y: rng.random_range(10.0..SCREEN_HEIGHT as f32 - 10.0),
-        });
-        // Give new particles a starting velocity in a random direction
+    let radius = 8.0;
+
+    for _ in 0..PARTICLES_PER_TICK {
+        let new = bodies.len();
+        bodies.push(Body::new(
+            Vector2 {
+                x: -radius,
+                y: rng.random_range(radius..SCREEN_HEIGHT as f32 - 10.0),
+            },
+            Shape::Circle(Circle::new(radius)),
+        ));
+
         let rand_dir = Vector2 {
             x: rng.random_range(-1.0..1.0),
             y: rng.random_range(-1.0..1.0),
         }
         .normalized();
 
-        particles[*particles_alive].vel = Vector2 {
-            // x: rand_dir.x * 200.0,
-            // y: rand_dir.y * 170.0,
+        bodies[new].motion.vel = Vector2 {
             x: 100.0 + rand_dir.x * 10.0,
             y: rand_dir.y * 10.0,
         };
-        particles[*particles_alive].mass = 0.1;
+        bodies[new].motion.mass = 0.1;
 
-        *particles_alive += 1;
+        *bodies_alive += 1;
     }
 
-    return particles;
+    return bodies;
 }

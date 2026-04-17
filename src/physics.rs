@@ -1,26 +1,17 @@
 use raylib::prelude::*;
 
+// These are the standard values that any
+// physics object in the program should hold
 #[derive(Clone)]
-pub struct Particle {
+pub struct Motion {
     pub pos: Vector2,
     pub vel: Vector2,
     pub acc: Vector2,
     pub force: Vector2,
     pub mass: f32,
-    pub radius: f32,
 }
 
-impl Particle {
-    pub fn new(pos: Vector2) -> Particle {
-        Particle {
-            pos,
-            vel: Vector2 { x: 0.0, y: 0.0 },
-            acc: Vector2 { x: 0.0, y: 0.0 },
-            force: Vector2 { x: 0.0, y: 0.0 },
-            mass: 1.0,
-            radius: 6.0,
-        }
-    }
+impl Motion {
     pub fn integrate(&mut self, dt: f32) {
         let new_pos = self.pos + self.vel * dt + self.acc * (dt * dt * 0.5);
         let new_acc = self.apply_forces();
@@ -32,44 +23,123 @@ impl Particle {
     fn apply_forces(&self) -> Vector2 {
         self.force / self.mass
     }
+}
 
-    pub fn collide(a: &mut Particle, b: &mut Particle) {
-        // This has taken me such a long time to figure out...
-        // Gaze, at my glorious creation!
+// TODO: figure out a way not to
+// store position in shapes?
+#[derive(Copy, Clone)]
+pub struct Circle {
+    pub radius: f32,
+}
+impl Circle {
+    pub fn new(radius: f32) -> Circle {
+        Circle { radius: radius }
+    }
+}
 
-        let delta = b.pos - a.pos;
-        let dist = delta.length();
-        let overlap = (a.radius + b.radius) - dist;
+#[derive(Copy, Clone)]
+pub struct CircleSeg {
+    pub radius: f32,
+    pub norm: Vector2,
+    pub dist: f32,
+}
 
-        // Check if there's any collision in the first place
-        if overlap > 0.0 {
-            let norm = delta / dist;
+impl CircleSeg {
+    pub fn new(radius: f32, norm: Vector2) -> CircleSeg {
+        CircleSeg {
+            radius: radius,
+            norm: norm,
+            dist: 0.0,
+        }
+    }
+}
 
-            // How aligned the velocity is with the normal
-            let alignment = (a.vel - b.vel).dot(norm);
+#[derive(Clone)]
+pub enum Shape {
+    Circle(Circle),
+    CircleSeg(CircleSeg),
+}
 
-            // If alignment is < 0, then particles are separating
-            // Otherwise we get some strange collision artifacts...
-            if alignment < 0.0 {
-                return;
+impl Shape {
+    pub fn collide(
+        shape: &Shape,
+        a_pos: Vector2,
+        a_vel: Vector2,
+        other: &Shape,
+        b_pos: Vector2,
+        b_vel: Vector2,
+    ) -> Option<Vector2> {
+        match (shape, other) {
+            (Shape::Circle(a), Shape::Circle(b)) => {
+                let delta = b_pos - a_pos;
+                let dist = delta.length();
+                let overlap = (a.radius + b.radius) - dist;
+
+                // Check if there's any collision in the first place
+                if overlap > 0.0 {
+                    let norm = delta / dist;
+
+                    // How aligned the velocity is with the normal
+                    let alignment = (a_vel - b_vel).dot(norm);
+                    // If alignment is < 0, then particles are separating
+                    if alignment < 0.0 {
+                        return None;
+                    }
+
+                    return Some(delta.normalized());
+                } else {
+                    return None;
+                }
             }
+            (Shape::Circle(a), Shape::CircleSeg(b)) => panic!(),
+            (Shape::CircleSeg(a), Shape::Circle(b)) => {
+                let delta = a_pos - b_pos;
+                let dist = delta.length();
+                let overlap = (a.radius + b.radius) - dist;
 
-            // Part of the velocity along normal
-            let avn = norm * a.vel.dot(norm);
-            let bvn = norm * b.vel.dot(norm);
+                // Check if there's any collision in the first place
+                if overlap > 0.0 {
+                    let norm = delta / dist;
 
-            // Part of the velocity that lies
-            // perpendicular to the collision normal
-            let avt = a.vel - avn;
-            let bvt = b.vel - bvn;
+                    // How aligned the velocity is with the normal
+                    let alignment = (a_vel - b_vel).dot(norm);
+                    // If alignment is < 0, then particles are separating
+                    if alignment < 0.0 {
+                        return None;
+                    }
 
-            // Get vel' by swapping vel along normal
-            let avelnew = avt + bvn;
-            let bvelnew = bvt + avn;
+                    let slope = a.norm.x * (a.norm.y / 1.0);
+                    if (b_pos.y - a_pos.y) < slope * (b_pos.x - a_pos.x) {
+                        return None;
+                    }
 
-            // We did it!
-            a.vel = avelnew;
-            b.vel = bvelnew;
+                    return Some(delta.normalized());
+                } else {
+                    return None;
+                }
+            }
+            (Shape::CircleSeg(a), Shape::CircleSeg(b)) => panic!(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Body {
+    pub motion: Motion,
+    pub shape: Shape,
+}
+
+impl Body {
+    pub fn new(pos: Vector2, shape: Shape) -> Body {
+        Body {
+            motion: Motion {
+                pos,
+                vel: Vector2 { x: 0.0, y: 0.0 },
+                acc: Vector2 { x: 0.0, y: 0.0 },
+                force: Vector2 { x: 0.0, y: 0.0 },
+                mass: 1.0,
+            },
+            shape: shape,
         }
     }
 }
