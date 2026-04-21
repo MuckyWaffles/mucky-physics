@@ -54,6 +54,17 @@ impl CircleSeg {
     }
 }
 
+#[derive(Copy, Clone)]
+pub struct Polygon {
+    pub vertices: Vec<Vector2>,
+}
+
+impl Polygon {
+    pub fn new() -> Polygon {
+        Polygon {}
+    }
+}
+
 #[derive(Clone)]
 pub enum Shape {
     Circle(Circle),
@@ -104,12 +115,12 @@ impl Shape {
                     // How aligned the velocity is with the normal
                     let alignment = (a_vel - b_vel).dot(norm);
                     // If alignment is < 0, then particles are separating
-                    if alignment < 0.0 {
+                    if alignment > 0.0 {
                         return None;
                     }
 
                     let slope = a.norm.x * (a.norm.y / 1.0);
-                    if (b_pos.y - a_pos.y) < slope * (b_pos.x - a_pos.x) {
+                    if (b_pos.y - a_pos.y) > slope * (b_pos.x - a_pos.x) {
                         return None;
                     }
 

@@ -42,13 +42,23 @@ fn main() {
                 Shape::Circle(a) => d.draw_circle_v(body.motion.pos, a.radius, Color::WHITE),
                 Shape::CircleSeg(a) => {
                     d.draw_circle_v(body.motion.pos, a.radius, Color::WHITE);
-                    d.draw_rectangle(
-                        (body.motion.pos.x - a.radius) as i32,
-                        (body.motion.pos.y) as i32,
-                        (a.radius * 2.0) as i32,
-                        (a.radius * 2.0) as i32,
-                        Color::BLACK,
-                    );
+                    // d.draw_rectangle(
+                    //     (body.motion.pos.x - a.radius) as i32,
+                    //     (body.motion.pos.y) as i32,
+                    //     (a.radius * 2.0) as i32,
+                    //     (a.radius * 2.0) as i32,
+                    //     Color::BLACK,
+                    // );
+                    let rec = Rectangle {
+                        x: body.motion.pos.x - a.radius,
+                        y: body.motion.pos.y,
+                        width: a.radius * 2.0,
+                        height: a.radius * 2.0,
+                    };
+                    let origin = Vector2 { x: 0.0, y: 0.0 };
+                    let angle = 0.24;
+                    d.draw_rectangle_pro(rec, origin, (angle / PI * 180.0) as f32, Color::BLACK);
+                    // Shape::CircleSeg(CircleSeg::new(radius, Vector2 { x: 0.242, y: 0.97 })),
                 }
             }
         }
