@@ -38,27 +38,17 @@ fn main() {
         d.clear_background(Color::BLACK);
 
         for body in snap.bodies.iter() {
-            match body.shape {
+            match body.shape.clone() {
                 Shape::Circle(a) => d.draw_circle_v(body.motion.pos, a.radius, Color::WHITE),
-                Shape::CircleSeg(a) => {
-                    d.draw_circle_v(body.motion.pos, a.radius, Color::WHITE);
-                    // d.draw_rectangle(
-                    //     (body.motion.pos.x - a.radius) as i32,
-                    //     (body.motion.pos.y) as i32,
-                    //     (a.radius * 2.0) as i32,
-                    //     (a.radius * 2.0) as i32,
-                    //     Color::BLACK,
-                    // );
-                    let rec = Rectangle {
-                        x: body.motion.pos.x - a.radius,
-                        y: body.motion.pos.y,
-                        width: a.radius * 2.0,
-                        height: a.radius * 2.0,
-                    };
-                    let origin = Vector2 { x: 0.0, y: 0.0 };
-                    let angle = 0.24;
-                    d.draw_rectangle_pro(rec, origin, (angle / PI * 180.0) as f32, Color::BLACK);
-                    // Shape::CircleSeg(CircleSeg::new(radius, Vector2 { x: 0.242, y: 0.97 })),
+                Shape::Polygon(a) => {
+                    let len = a.vertices.len();
+                    for i in 0..len {
+                        d.draw_line_v(
+                            a.vertices[i] + body.motion.pos,
+                            a.vertices[(i + 1) % len] + body.motion.pos,
+                            Color::WHITE,
+                        );
+                    }
                 }
             }
         }
@@ -137,13 +127,40 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
         });
     }
 
-    let radius = 180.0;
+    let mut wing_vecs: Vec<Vector2> = Vec::with_capacity(6);
+
+    let scale = 5.0;
+    wing_vecs.push(Vector2 {
+        x: 10.0 * scale,
+        y: 0.0 * scale,
+    });
+    wing_vecs.push(Vector2 {
+        x: 0.0 * scale,
+        y: 10.0 * scale,
+    });
+    wing_vecs.push(Vector2 {
+        x: 10.0 * scale,
+        y: 20.0 * scale,
+    });
+    wing_vecs.push(Vector2 {
+        x: 70.0 * scale,
+        y: 20.0 * scale,
+    });
+    wing_vecs.push(Vector2 {
+        x: 75.0 * scale,
+        y: 15.0 * scale,
+    });
+    wing_vecs.push(Vector2 {
+        x: 70.0 * scale,
+        y: 10.0 * scale,
+    });
+
     bodies.push(Body::new(
         Vector2 {
             x: SCREEN_WIDTH as f32 / 2.0,
             y: SCREEN_HEIGHT as f32 / 2.0,
         },
-        Shape::CircleSeg(CircleSeg::new(radius, Vector2 { x: 0.242, y: 0.97 })),
+        Shape::Polygon(Polygon::new(wing_vecs)),
     ));
     bodies[0].motion.mass = 100.0;
 
@@ -187,15 +204,18 @@ fn physics_thread(tx: mpsc::Sender<(Snapshot, Data)>) {
             let b = &new_bodies[i];
 
             for cell in cells.iter_mut() {
-                match b.shape {
+                match b.shape.clone() {
                     Shape::Circle(a) => {
                         if cell.rect.check_collision_circle_rec(b.motion.pos, a.radius) {
                             cell.particles.push(i);
                         }
                     }
-                    Shape::CircleSeg(a) => {
-                        if cell.rect.check_collision_circle_rec(b.motion.pos, a.radius) {
-                            cell.particles.push(i);
+                    Shape::Polygon(a) => {
+                        for vertex in a.vertices.iter() {
+                            if cell.rect.check_collision_point_rec(*vertex + b.motion.pos) {
+                                cell.particles.push(i);
+                                break;
+                            }
                         }
                     }
                 }
@@ -272,86 +292,6 @@ struct Data {
     collision_time: u64,
 }
 
-// fn particle_check_wall(part: &Particle, wall: &Rectangle) -> Vector2 {
-//     let left = Vector2 { x: -1.0, y: 0.0 };
-//     let right = Vector2 { x: 1.0, y: 0.0 };
-//     let up = Vector2 { x: 0.0, y: -1.0 };
-//     let down = Vector2 { x: 0.0, y: 1.0 };
-
-//     if !wall.check_collision_circle_rec(part.pos, part.radius) {
-//         return Vector2 { x: 0.0, y: 0.0 };
-//     }
-
-//     let l = wall.x + wall.width - (part.pos.x - part.radius);
-//     let r = part.pos.x + part.radius - wall.x;
-//     let u = wall.y + wall.height - (part.pos.y - part.radius);
-//     let d = part.pos.y + part.radius - wall.y;
-
-//     let min = f32::min(f32::min(l, r), f32::min(u, d));
-
-//     if min == l {
-//         return right;
-//     } else if min == r {
-//         return left;
-//     } else if min == u {
-//         return down;
-//     } else {
-//         return up;
-//     }
-// }
-
-// fn particle_collide_wall(
-//     part: &mut Particle,
-//     walls: &mut Vec<Rectangle>,
-//     ship_mass: f32,
-//     ship_vel: Vector2,
-//     ship_impulse: &mut Vector2,
-// ) {
-//     let left = Vector2 { x: -1.0, y: 0.0 };
-//     let right = Vector2 { x: 1.0, y: 0.0 };
-//     let up = Vector2 { x: 0.0, y: -1.0 };
-//     let down = Vector2 { x: 0.0, y: 1.0 };
-
-//     let zero = Vector2 { x: 0.0, y: 0.0 };
-//     for wall in walls.iter() {
-//         let m1 = ship_mass;
-//         let m2 = part.mass;
-
-//         let norm = particle_check_wall(part, wall);
-//         if norm == zero {
-//             continue;
-//         }
-
-//         let v1 = ship_vel.x;
-//         let v2 = part.vel.x;
-//         if norm == right || norm == left {
-//             let vcm = (v1 * m1 + v2 * m2) / (m1 + m2);
-//             ship_impulse.x += (2.0 * vcm - v1) - ship_vel.x;
-//             part.vel.x = 2.0 * vcm - v2;
-
-//             if norm == right {
-//                 part.pos.x = wall.x + wall.width + part.radius;
-//             } else if norm == left {
-//                 part.pos.x = wall.x - part.radius;
-//             }
-//         }
-
-//         let v1 = ship_vel.y;
-//         let v2 = part.vel.y;
-//         if norm == down || norm == up {
-//             let vcm = (v1 * m1 + v2 * m2) / (m1 + m2);
-//             ship_impulse.y += (2.0 * vcm - v1) - ship_vel.y;
-//             part.vel.y = 2.0 * vcm - v2;
-
-//             if norm == down {
-//                 part.pos.y = wall.y + wall.height + part.radius;
-//             } else if norm == up {
-//                 part.pos.y = wall.y - part.radius;
-//             }
-//         }
-//     }
-// }
-
 const PARTICLES_PER_TICK: u32 = 2;
 
 fn body_emitter(mut bodies: Vec<Body>, bodies_alive: &mut usize) -> Vec<Body> {
@@ -386,3 +326,30 @@ fn body_emitter(mut bodies: Vec<Body>, bodies_alive: &mut usize) -> Vec<Body> {
 
     return bodies;
 }
+
+// fn point_in_polygon(
+//     polygon: Vec<Vector2>,
+//     point: Vector2,
+//     point_start: Vector2,
+//     pos: Vector2,
+// ) -> Option<usize> {
+//     let mut intersection = 0;
+//     let mut intersections = 0;
+//     let len = polygon.len();
+//     for i in 0..len {
+//         if line_intersect(
+//             polygon[i],
+//             polygon[(i + 1) % len],
+//             point_start - pos,
+//             point - pos,
+//         ) {
+//             intersection = i;
+//             intersections += 1;
+//         }
+//     }
+
+//     if (intersections != 0) && (intersections % 2 == 1) {
+//         return Some(intersection);
+//     }
+//     return None;
+// }

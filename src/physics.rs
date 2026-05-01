@@ -1,3 +1,4 @@
+use rand::Rng;
 use raylib::prelude::*;
 
 // These are the standard values that any
@@ -37,38 +38,21 @@ impl Circle {
     }
 }
 
-#[derive(Copy, Clone)]
-pub struct CircleSeg {
-    pub radius: f32,
-    pub norm: Vector2,
-    pub dist: f32,
-}
-
-impl CircleSeg {
-    pub fn new(radius: f32, norm: Vector2) -> CircleSeg {
-        CircleSeg {
-            radius: radius,
-            norm: norm,
-            dist: 0.0,
-        }
-    }
-}
-
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct Polygon {
     pub vertices: Vec<Vector2>,
 }
 
 impl Polygon {
-    pub fn new() -> Polygon {
-        Polygon {}
+    pub fn new(vertices: Vec<Vector2>) -> Polygon {
+        Polygon { vertices }
     }
 }
 
 #[derive(Clone)]
 pub enum Shape {
     Circle(Circle),
-    CircleSeg(CircleSeg),
+    Polygon(Polygon),
 }
 
 impl Shape {
@@ -102,34 +86,49 @@ impl Shape {
                     return None;
                 }
             }
-            (Shape::Circle(a), Shape::CircleSeg(b)) => panic!(),
-            (Shape::CircleSeg(a), Shape::Circle(b)) => {
-                let delta = a_pos - b_pos;
-                let dist = delta.length();
-                let overlap = (a.radius + b.radius) - dist;
+            (Shape::Circle(a), Shape::Polygon(b)) => panic!(),
+            (Shape::Polygon(a), Shape::Circle(b)) => {
+                let mut intersection = 0;
+                let mut intersections = 0;
+                let len = a.vertices.len();
 
-                // Check if there's any collision in the first place
-                if overlap > 0.0 {
-                    let norm = delta / dist;
+                for i in 0..len {
+                    let seg = (a.vertices[(i + 1) % len] - a.vertices[i]).normalized();
+                    let norm = Vector2 {
+                        x: seg.y,
+                        y: -seg.x,
+                    };
+                    let point = b_pos + norm * b.radius;
+                    let point_start = point - (b_vel - a_vel);
 
-                    // How aligned the velocity is with the normal
-                    let alignment = (a_vel - b_vel).dot(norm);
-                    // If alignment is < 0, then particles are separating
-                    if alignment > 0.0 {
-                        return None;
+                    if line_intersect(
+                        a.vertices[i],
+                        a.vertices[(i + 1) % len],
+                        point_start - a_pos,
+                        point - a_pos,
+                    ) {
+                        intersection = i;
+                        intersections += 1;
                     }
+                }
 
-                    let slope = a.norm.x * (a.norm.y / 1.0);
-                    if (b_pos.y - a_pos.y) > slope * (b_pos.x - a_pos.x) {
-                        return None;
-                    }
-
-                    return Some(delta.normalized());
-                } else {
+                let inside = intersections % 2 == 1;
+                if intersections == 0 {
                     return None;
                 }
+
+                let i = intersection;
+                let seg = (a.vertices[(i + 1) % len] - a.vertices[i]).normalized();
+                let mut norm = Vector2 {
+                    x: seg.y,
+                    y: -seg.x,
+                };
+                if point_in_polygon(a.vertices.clone(), seg, Vector2 { x: 0.0, y: 0.0 }) {
+                    norm = -norm;
+                }
+                return Some(norm);
             }
-            (Shape::CircleSeg(a), Shape::CircleSeg(b)) => panic!(),
+            (Shape::Polygon(a), Shape::Polygon(b)) => panic!(),
         }
     }
 }
@@ -178,4 +177,25 @@ pub fn collide_with_mass(norm: Vector2, av: &mut Vector2, am: f32, bv: &mut Vect
     // We did it!
     *av = avelnew + vcm;
     *bv = bvelnew + vcm;
+}
+
+fn line_intersect(a0: Vector2, a1: Vector2, b0: Vector2, b1: Vector2) -> bool {
+    let sa = a1 - a0;
+    let sb = b1 - b0;
+    let s = (-sa.y * (a0.x - b0.x) + sa.x * (a0.y - b0.y)) / (-sb.x * sa.y + sa.x * sb.y);
+    let t = (sb.x * (a0.y - b0.y) - sb.y * (a0.x - b0.x)) / (-sb.x * sa.y + sa.x * sb.y);
+    return s >= 0.0 && s <= 1.0 && t >= 0.0 && t <= 1.0;
+}
+
+fn point_in_polygon(polygon: Vec<Vector2>, point: Vector2, start: Vector2) -> bool {
+    let mut intersections = 0;
+    let len = polygon.len();
+
+    for i in 0..len {
+        if line_intersect(polygon[i], polygon[(i + 1) % len], start, point) {
+            intersections += 1;
+        }
+    }
+
+    return intersections % 2 == 1;
 }
